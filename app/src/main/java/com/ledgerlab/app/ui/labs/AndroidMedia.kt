@@ -35,9 +35,15 @@ import okhttp3.Request
 
 private const val MAX_MEDIA_BYTES = 25L * 1024 * 1024
 
-/** Opens the system file picker for an image, video or audio file and reads it into memory. */
+val MEDIA_TYPES = arrayOf("image/*", "video/*", "audio/*")
+
+/** Opens the system file picker (images, video and audio unless [mimeTypes] says otherwise) and reads the file into memory. */
 @Composable
-fun rememberMediaPicker(onPicked: (PickedMedia) -> Unit, onError: (String) -> Unit): () -> Unit {
+fun rememberMediaPicker(
+    onPicked: (PickedMedia) -> Unit,
+    onError: (String) -> Unit,
+    mimeTypes: Array<String> = MEDIA_TYPES,
+): () -> Unit {
     val context = LocalContext.current
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -53,7 +59,7 @@ fun rememberMediaPicker(onPicked: (PickedMedia) -> Unit, onError: (String) -> Un
             } else {
                 null
             }
-        } ?: "nft-media"
+        } ?: "file"
         val bytes = runCatching { resolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
         if (bytes == null) {
             onError("Couldn't read that file.")
@@ -61,7 +67,7 @@ fun rememberMediaPicker(onPicked: (PickedMedia) -> Unit, onError: (String) -> Un
         }
         onPicked(PickedMedia(name, resolver.getType(uri) ?: "application/octet-stream", bytes))
     }
-    return { launcher.launch(arrayOf("image/*", "video/*", "audio/*")) }
+    return { launcher.launch(mimeTypes) }
 }
 
 /** A preview of a picked file: the picture itself for images, otherwise its type. */

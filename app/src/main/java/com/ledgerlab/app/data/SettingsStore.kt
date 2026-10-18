@@ -21,6 +21,14 @@ class SettingsStore(context: Context) {
         _hasPinataKey.value = !jwt.isNullOrBlank()
     }
 
+    /** Any other small secret a lab keeps on the device, such as escrow fulfillments. Encrypted at rest. */
+    fun secret(name: String): String? = prefs.getString("secret-$name", null)?.let { runCatching { cipher.decrypt(it) }.getOrNull() }
+
+    fun setSecret(name: String, value: String?) {
+        if (value == null) prefs.edit().remove("secret-$name").apply()
+        else prefs.edit().putString("secret-$name", cipher.encrypt(value)).apply()
+    }
+
     private companion object {
         const val KEY_PINATA = "pinata-jwt"
     }

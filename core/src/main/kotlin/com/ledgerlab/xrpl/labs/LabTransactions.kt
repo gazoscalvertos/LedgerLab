@@ -3,6 +3,7 @@ package com.ledgerlab.xrpl.labs
 import com.google.common.primitives.UnsignedInteger
 import com.google.common.primitives.UnsignedLong
 import com.ledgerlab.xrpl.wallet.Autofill
+import com.ripple.cryptoconditions.CryptoConditionReader
 import org.xrpl.xrpl4j.crypto.keys.PublicKey
 import org.xrpl.xrpl4j.model.flags.AmmDepositFlags
 import org.xrpl.xrpl4j.model.flags.NfTokenCreateOfferFlags
@@ -155,9 +156,11 @@ object LabTransactions {
         .flags(NfTokenMintFlags.builder().tfBurnable(true).tfTransferable(transferable).tfOnlyXRP(onlyXrp).build())
         .build()
 
-    fun nftBurn(from: Address, key: PublicKey, fill: Autofill, nftId: String): NfTokenBurn = NfTokenBurn.builder()
+    /** [owner] is set when the issuer burns a burnable NFT someone else holds, like a ticket at the door. */
+    fun nftBurn(from: Address, key: PublicKey, fill: Autofill, nftId: String, owner: String? = null): NfTokenBurn = NfTokenBurn.builder()
         .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
         .nfTokenId(NfTokenId.of(nftId))
+        .apply { if (owner != null) owner(Address.of(owner)) }
         .build()
 
     /** Times are seconds since the Ripple epoch. [amount] can be XRP or, with token escrow (XLS-85), a token. */
@@ -175,6 +178,64 @@ object LabTransactions {
         .amount(amount)
         .finishAfter(UnsignedLong.valueOf(finishAfter))
         .apply { if (cancelAfter != null) cancelAfter(UnsignedLong.valueOf(cancelAfter)) }
+        .build()
+
+    /** An escrow released by a secret instead of (or as well as) a time: the PREIMAGE-SHA-256 [conditionHex]. */
+    fun escrowCreateConditional(
+        from: Address,
+        key: PublicKey,
+        fill: Autofill,
+        destination: String,
+        amount: CurrencyAmount,
+        conditionHex: String,
+        cancelAfter: Long,
+        memo: String? = null,
+    ): EscrowCreate = EscrowCreate.builder()
+        .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+        .destination(Address.of(destination))
+        .amount(amount)
+        .condition(CryptoConditionReader.readCondition(unhex(conditionHex)))
+        .cancelAfter(UnsignedLong.valueOf(cancelAfter))
+        .apply { if (memo != null) addMemos(MemoWrapper.builder().memo(Memo.withPlaintext(memo).build()).build()) }
+        .build()
+
+    /** Releases a conditional escrow by revealing the fulfillment. Costs more than a normal fee: 330 drops plus 10 per 16 bytes. */
+    fun escrowFinishWithFulfillment(
+        from: Address,
+        key: PublicKey,
+        fill: Autofill,
+        owner: String,
+        offerSequence: Long,
+        conditionHex: String,
+        fulfillmentHex: String,
+    ): EscrowFinish {
+        val fulfillment = CryptoConditionReader.readFulfillment(unhex(fulfillmentHex))
+        return EscrowFinish.builder()
+            .account(from).signingPublicKey(key)
+            .fee(EscrowFinish.computeFee(XrpCurrencyAmount.ofDrops(maxOf(fill.feeDrops, 10)), fulfillment))
+            .sequence(seq(fill)).lastLedgerSequence(last(fill))
+            .owner(Address.of(owner))
+            .offerSequence(UnsignedInteger.valueOf(offerSequence))
+            .condition(CryptoConditionReader.readCondition(unhex(conditionHex)))
+            .fulfillment(fulfillment)
+            .build()
+    }
+
+    /**
+     * Records [sha256Hex] on the ledger in a memo. An AccountSet that changes nothing is the cheapest
+     * transaction an account can send to itself, so the only cost is the fee.
+     */
+    fun notarize(from: Address, key: PublicKey, fill: Autofill, sha256Hex: String, label: String): AccountSet = AccountSet.builder()
+        .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+        .addMemos(
+            MemoWrapper.builder().memo(
+                Memo.builder()
+                    .memoType(hex(Notary.MEMO_TYPE))
+                    .memoData(sha256Hex.uppercase())
+                    .memoFormat(hex(label.take(120)))
+                    .build(),
+            ).build(),
+        )
         .build()
 
     fun escrowCancel(from: Address, key: PublicKey, fill: Autofill, owner: String, offerSequence: Long): EscrowCancel =
@@ -315,6 +376,8 @@ object LabTransactions {
         }
         .flags(PaymentChannelClaimFlags.builder().tfClose(close).build())
         .build()
+
+    internal fun unhex(hex: String): ByteArray = hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
 
     internal fun hex(text: String): String = text.toByteArray(Charsets.UTF_8).joinToString("") { "%02X".format(it) }
 

@@ -160,6 +160,16 @@ fun DashboardScreen(
                 LabsGrid(onOpenFeature, Modifier.fillMaxWidth())
             }
         }
+
+        item {
+            Column {
+                Text("MOCKUP APPS", style = MaterialTheme.typography.labelSmall, color = accent)
+                Spacer(Modifier.height(4.dp))
+                Text("Real-world ideas built on those features", style = MaterialTheme.typography.titleMedium, color = LabColors.TextPrimary)
+                Spacer(Modifier.height(12.dp))
+                LabsGrid(onOpenFeature, Modifier.fillMaxWidth(), features = LabFeature.entries.filter { it.mockup })
+            }
+        }
     }
 }
 
