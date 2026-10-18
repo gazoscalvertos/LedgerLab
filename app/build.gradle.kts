@@ -52,6 +52,11 @@ android {
     }
 }
 
+configurations.configureEach {
+    // Guava (via xrpl4j) already contains ListenableFuture; drop the stub androidx pulls in.
+    exclude(group = "com.google.guava", module = "listenablefuture")
+}
+
 dependencies {
     implementation(project(":core"))
 
