@@ -92,6 +92,7 @@ fun TxStatusCard(status: TxStatus, network: XrplNetwork, onClear: () -> Unit) {
         is TxStatus.Working -> LabColors.Cyan to status.label
         is TxStatus.Done -> (if (status.outcome.success) LabColors.Matrix else LabColors.Gold) to status.label
         is TxStatus.Failed -> LabColors.Danger to status.label
+        is TxStatus.Note -> LabColors.Matrix to status.label
         TxStatus.Idle -> return
     }
     Panel(accent = color) {
@@ -105,8 +106,13 @@ fun TxStatusCard(status: TxStatus, network: XrplNetwork, onClear: () -> Unit) {
                 Text(
                     when (status) {
                         is TxStatus.Working -> status.step + "…"
-                        is TxStatus.Done -> if (status.outcome.success) "Validated: tesSUCCESS" else status.outcome.result
-                        is TxStatus.Failed -> status.message
+                        is TxStatus.Done -> if (status.outcome.success) {
+                            "Validated: tesSUCCESS"
+                        } else {
+                            status.outcome.result + (explainResult(status.outcome.result)?.let { "\n$it" } ?: "")
+                        }
+                        is TxStatus.Failed -> status.message + (explainResult(status.message)?.let { "\n$it" } ?: "")
+                        is TxStatus.Note -> status.message
                         TxStatus.Idle -> ""
                     },
                     style = MaterialTheme.typography.bodySmall,
@@ -140,3 +146,24 @@ fun KeyValue(label: String, value: String, valueColor: Color = LabColors.TextPri
 }
 
 fun shortAddr(address: String) = Format.shortAddress(address)
+
+/** Plain-English hints for the result codes people hit most in the labs. */
+fun explainResult(result: String): String? {
+    val code = result.substringBefore(':').trim()
+    return when (code) {
+        "temDISABLED" -> "This network hasn't switched on that feature (amendment) yet. Try Devnet, which gets new features first."
+        "tecNO_LINE", "tecNO_LINE_REDUNDANT" -> "The account needs a trust line for this token first (Tokens lab, step 2)."
+        "tecPATH_DRY", "tecPATH_PARTIAL" -> "No route for the payment: usually the receiver has no trust line, or the issuer hasn't enabled rippling."
+        "tecUNFUNDED_OFFER", "tecUNFUNDED_PAYMENT", "tecUNFUNDED" -> "The sender doesn't hold enough of that asset."
+        "tecINSUFFICIENT_RESERVE", "tecINSUF_RESERVE_LINE", "tecINSUF_RESERVE_OFFER" -> "Not enough spare XRP to cover the owner reserve for a new ledger object. Fund the wallet from the faucet."
+        "tecNO_DST", "tecNO_DST_INSUF_XRP" -> "The destination account doesn't exist yet. Fund it with at least the base reserve first."
+        "tecNO_PERMISSION" -> "This account isn't allowed to do that, for example accepting an offer meant for someone else or locking a token whose issuer doesn't allow it."
+        "tecNO_ENTRY" -> "The ledger object no longer exists. It may already have been used, cancelled or removed."
+        "tecNO_AUTH" -> "The issuer requires authorised trust lines."
+        "tecEXPIRED" -> "That offer or object has expired."
+        "tecCANT_ACCEPT_OWN_NFTOKEN_OFFER" -> "You can't accept your own NFT offer. Switch to another wallet."
+        "tecINSUFFICIENT_FUNDS" -> "The buyer doesn't have enough of the asset the offer asks for."
+        "tefPAST_SEQ", "tefMAX_LEDGER" -> "The transaction went stale before it validated. Try again."
+        else -> null
+    }
+}

@@ -15,6 +15,7 @@ import com.ledgerlab.app.ui.components.LabFeature
 import com.ledgerlab.app.ui.dashboard.DashboardScreen
 import com.ledgerlab.app.ui.dashboard.DashboardViewModel
 import com.ledgerlab.app.ui.labs.AmmLab
+import com.ledgerlab.app.ui.labs.ChannelsLab
 import com.ledgerlab.app.ui.labs.DexLab
 import com.ledgerlab.app.ui.labs.EscrowLab
 import com.ledgerlab.app.ui.labs.ExplorerLab
@@ -45,6 +46,7 @@ class MainActivity : ComponentActivity() {
                     LabFeature.DEX -> DexLab(onBack = back)
                     LabFeature.NFTS -> NftLab(onBack = back)
                     LabFeature.ESCROW -> EscrowLab(onBack = back)
+                    LabFeature.CHANNELS -> ChannelsLab(onBack = back)
                     LabFeature.AMM -> AmmLab(onBack = back)
                     LabFeature.EXPLORER -> ExplorerLab(onBack = back)
                     null -> {

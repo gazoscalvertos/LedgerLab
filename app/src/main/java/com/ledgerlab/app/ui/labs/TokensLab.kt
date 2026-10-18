@@ -33,6 +33,7 @@ import com.ledgerlab.xrpl.labs.Asset
 import com.ledgerlab.xrpl.labs.Currencies
 import com.ledgerlab.xrpl.labs.LabTransactions
 import com.ledgerlab.xrpl.labs.TrustLine
+import com.ledgerlab.xrpl.wallet.WalletKeys
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -66,6 +67,15 @@ class TokensViewModel(app: Application) : LabViewModel(app) {
         runTx(label, issuer) { a, k, f -> LabTransactions.payment(a, k, f, holder.address, token.amount(value)) }
     }
 
+    /** Holder-to-holder: tokens ripple through the issuer, so both sides need a trust line to it. */
+    fun send(from: StoredWallet, code: String, issuer: String, destination: String, amount: String) {
+        val label = "${from.label} sends $code"
+        val token = tokenOrNull(code, issuer) ?: return fail(label, "Pick one of the holder's tokens.")
+        if (!WalletKeys.isValidAddress(destination)) return fail(label, "Enter a valid destination address.")
+        val value = amount.toBigDecimalOrNull()?.takeIf { it.signum() > 0 } ?: return fail(label, "Enter a positive amount.")
+        runTx(label, from) { a, k, f -> LabTransactions.payment(a, k, f, destination.trim(), token.amount(value)) }
+    }
+
     private fun token(code: String, issuer: StoredWallet): Asset.Token? =
         if (Currencies.isValid(code)) Asset.Token(code.trim(), issuer.address) else null
 }
@@ -85,6 +95,10 @@ fun TokensLab(onBack: () -> Unit, vm: TokensViewModel = viewModel()) {
     var code by rememberSaveable { mutableStateOf("LAB") }
     var limit by rememberSaveable { mutableStateOf("1000000") }
     var amount by rememberSaveable { mutableStateOf("100") }
+    var sendCode by rememberSaveable { mutableStateOf("") }
+    var sendIssuer by rememberSaveable { mutableStateOf("") }
+    var sendTo by rememberSaveable { mutableStateOf("") }
+    var sendAmount by rememberSaveable { mutableStateOf("10") }
 
     LabScaffold("Tokens", "Issue your own currency with trust lines", accent, network, vm::selectNetwork, onBack) {
         if (wallets.size < 2) {
@@ -122,6 +136,32 @@ fun TokensLab(onBack: () -> Unit, vm: TokensViewModel = viewModel()) {
                         LabButton("Issue $code", { vm.issue(issuer, h, code, amount) }, Modifier.fillMaxWidth(), accent)
                     }
                 }
+                item {
+                    val held = lines.filter { !it.issuedByMe }.map { it.token }
+                    val others = wallets.filter { it.id != h.id && it.address != sendIssuer }
+                    Step(4, "Holder sends tokens on", "A Payment from ${h.label} to anyone with a trust line to the same issuer. The tokens ripple through the issuer.") {
+                        if (held.isEmpty()) {
+                            Text("${h.label} doesn't hold any tokens yet. Do steps 2 and 3 first.", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+                        } else {
+                            TokenPicker(sendCode, sendIssuer, held, accent) { c, i -> sendCode = c; sendIssuer = i }
+                            Spacer(Modifier.height(8.dp))
+                            Text("To", style = MaterialTheme.typography.labelSmall, color = LabColors.TextSecondary)
+                            WalletChips(others, others.firstOrNull { it.address == sendTo }, LabColors.Orange, { sendTo = it.address })
+                            Spacer(Modifier.height(8.dp))
+                            LabTextField(sendTo, { sendTo = it.trim() }, "Destination address", Modifier.fillMaxWidth(), accent, mono = true)
+                            Spacer(Modifier.height(8.dp))
+                            LabTextField(sendAmount, { sendAmount = it }, "Amount", Modifier.fillMaxWidth(), accent, keyboardType = KeyboardType.Decimal)
+                            Spacer(Modifier.height(8.dp))
+                            LabButton("Send ${sendCode.ifBlank { "tokens" }}", { vm.send(h, sendCode, sendIssuer, sendTo, sendAmount) }, Modifier.fillMaxWidth(), accent)
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "The receiver needs its own trust line first: pick it as the holder above and do step 2. Then trade the token in the DEX or AMM labs, lock it in Escrow, or price NFTs in it.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = LabColors.TextMuted,
+                            )
+                        }
+                    }
+                }
             }
             item { TxStatusCard(tx, network, vm::clearTx) }
             item {
@@ -135,7 +175,12 @@ fun TokensLab(onBack: () -> Unit, vm: TokensViewModel = viewModel()) {
                             Row {
                                 Column(Modifier.weight(1f)) {
                                     Text(line.currency, fontWeight = FontWeight.Bold, color = accent)
-                                    Text("issuer ${shortAddr(line.issuer)}", fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = LabColors.TextSecondary)
+                                    Text(
+                                        if (line.issuedByMe) "issued to ${shortAddr(line.holder ?: "")}" else "issuer ${shortAddr(line.issuer)}",
+                                        fontFamily = Mono,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = LabColors.TextSecondary,
+                                    )
                                 }
                                 Column {
                                     Text(line.balance, fontFamily = Mono, fontWeight = FontWeight.Bold, color = LabColors.TextPrimary)
@@ -155,6 +200,7 @@ fun TokensLab(onBack: () -> Unit, vm: TokensViewModel = viewModel()) {
                     "The issuer's balance on the line is negative: tokens are an IOU from the issuer to the holder.",
                     "Default Ripple lets balances flow between holders through the issuer, which the DEX and payments rely on.",
                     "Codes other than 3 letters are stored as 40 hex characters, which is why some tokens look like gibberish on explorers.",
+                    "Holders pay each other with an ordinary Payment whose Amount names the currency and issuer. Balances move between their two trust lines.",
                 ),
                 code = """
                     {

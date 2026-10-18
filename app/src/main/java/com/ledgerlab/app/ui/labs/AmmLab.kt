@@ -46,6 +46,8 @@ data class AmmState(
 )
 
 class AmmViewModel(app: Application) : LabViewModel(app) {
+    override val usesTokens get() = true
+
     private val _state = MutableStateFlow(AmmState())
     val state: StateFlow<AmmState> = _state.asStateFlow()
 
@@ -102,6 +104,7 @@ fun AmmLab(onBack: () -> Unit, vm: AmmViewModel = viewModel()) {
     val wallets by vm.wallets.collectAsStateWithLifecycle()
     val wallet by vm.selected.collectAsStateWithLifecycle()
     val state by vm.state.collectAsStateWithLifecycle()
+    val knownTokens by vm.tokens.collectAsStateWithLifecycle()
     val tx by vm.tx.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
     val accent = LabColors.Violet
@@ -122,7 +125,7 @@ fun AmmLab(onBack: () -> Unit, vm: AmmViewModel = viewModel()) {
                 Panel(accent = accent, title = "Pool for XRP and…") {
                     WalletChips(wallets, wallet, accent, { vm.selectWallet(it.id) })
                     Spacer(Modifier.height(12.dp))
-                    TokenPicker(code, issuer, state.lines, accent) { c, i -> code = c; issuer = i }
+                    TokenPicker(code, issuer, knownTokens, accent) { c, i -> code = c; issuer = i }
                 }
             }
             val pool = state.pool

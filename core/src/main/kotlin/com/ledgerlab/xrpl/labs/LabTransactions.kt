@@ -5,7 +5,9 @@ import com.google.common.primitives.UnsignedLong
 import com.ledgerlab.xrpl.wallet.Autofill
 import org.xrpl.xrpl4j.crypto.keys.PublicKey
 import org.xrpl.xrpl4j.model.flags.AmmDepositFlags
+import org.xrpl.xrpl4j.model.flags.NfTokenCreateOfferFlags
 import org.xrpl.xrpl4j.model.flags.NfTokenMintFlags
+import org.xrpl.xrpl4j.model.flags.PaymentChannelClaimFlags
 import org.xrpl.xrpl4j.model.flags.OfferCreateFlags
 import org.xrpl.xrpl4j.model.flags.TrustSetFlags
 import org.xrpl.xrpl4j.model.ledger.Issue
@@ -14,17 +16,26 @@ import org.xrpl.xrpl4j.model.transactions.Address
 import org.xrpl.xrpl4j.model.transactions.AmmCreate
 import org.xrpl.xrpl4j.model.transactions.AmmDeposit
 import org.xrpl.xrpl4j.model.transactions.CurrencyAmount
+import org.xrpl.xrpl4j.model.transactions.EscrowCancel
 import org.xrpl.xrpl4j.model.transactions.EscrowCreate
 import org.xrpl.xrpl4j.model.transactions.EscrowFinish
+import org.xrpl.xrpl4j.model.transactions.Hash256
 import org.xrpl.xrpl4j.model.transactions.IssuedCurrencyAmount
+import org.xrpl.xrpl4j.model.transactions.NfTokenAcceptOffer
 import org.xrpl.xrpl4j.model.transactions.NfTokenBurn
+import org.xrpl.xrpl4j.model.transactions.NfTokenCancelOffer
+import org.xrpl.xrpl4j.model.transactions.NfTokenCreateOffer
 import org.xrpl.xrpl4j.model.transactions.NfTokenId
 import org.xrpl.xrpl4j.model.transactions.NfTokenMint
 import org.xrpl.xrpl4j.model.transactions.NfTokenUri
 import org.xrpl.xrpl4j.model.transactions.OfferCancel
 import org.xrpl.xrpl4j.model.transactions.OfferCreate
 import org.xrpl.xrpl4j.model.transactions.Payment
+import org.xrpl.xrpl4j.model.transactions.PaymentChannelClaim
+import org.xrpl.xrpl4j.model.transactions.PaymentChannelCreate
+import org.xrpl.xrpl4j.model.transactions.PaymentChannelFund
 import org.xrpl.xrpl4j.model.transactions.TradingFee
+import org.xrpl.xrpl4j.model.transactions.TransferFee
 import org.xrpl.xrpl4j.model.transactions.TrustSet
 import org.xrpl.xrpl4j.model.transactions.XrpCurrencyAmount
 import java.math.BigDecimal
@@ -80,6 +91,12 @@ object LabTransactions {
         .setFlag(AccountSet.AccountSetFlag.DEFAULT_RIPPLE)
         .build()
 
+    /** Lets holders lock this issuer's tokens in escrow (XLS-85 token escrow, asfAllowTrustLineLocking). */
+    fun allowTrustLineLocking(from: Address, key: PublicKey, fill: Autofill): AccountSet = AccountSet.builder()
+        .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+        .setFlag(AccountSet.AccountSetFlag.ALLOW_TRUSTLINE_LOCKING)
+        .build()
+
     fun trustSet(from: Address, key: PublicKey, fill: Autofill, token: Asset.Token, limit: BigDecimal): TrustSet =
         TrustSet.builder()
             .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
@@ -108,35 +125,55 @@ object LabTransactions {
         .offerSequence(UnsignedInteger.valueOf(offerSequence))
         .build()
 
-    fun nftMint(from: Address, key: PublicKey, fill: Autofill, uri: String, taxon: Long, transferable: Boolean): NfTokenMint =
-        NfTokenMint.builder()
-            .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
-            .tokenTaxon(UnsignedLong.valueOf(taxon))
-            .apply { if (uri.isNotBlank()) uri(NfTokenUri.of(hex(uri.trim()))) }
-            .flags(NfTokenMintFlags.builder().tfBurnable(true).tfTransferable(transferable).build())
-            .build()
+    /**
+     * [transferFee] is the issuer's royalty on secondary sales in units of 1/1000 of a percent
+     * (0 to 50,000, so 2,500 = 2.5%). It needs the NFT to be transferable.
+     */
+    fun nftMint(
+        from: Address,
+        key: PublicKey,
+        fill: Autofill,
+        uri: String,
+        taxon: Long,
+        transferable: Boolean,
+        transferFee: Int = 0,
+        onlyXrp: Boolean = false,
+    ): NfTokenMint = NfTokenMint.builder()
+        .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+        .tokenTaxon(UnsignedLong.valueOf(taxon))
+        .apply { if (uri.isNotBlank()) uri(NfTokenUri.of(hex(uri.trim()))) }
+        .apply { if (transferFee > 0) transferFee(TransferFee.of(UnsignedInteger.valueOf(transferFee.toLong()))) }
+        .flags(NfTokenMintFlags.builder().tfBurnable(true).tfTransferable(transferable).tfOnlyXRP(onlyXrp).build())
+        .build()
 
     fun nftBurn(from: Address, key: PublicKey, fill: Autofill, nftId: String): NfTokenBurn = NfTokenBurn.builder()
         .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
         .nfTokenId(NfTokenId.of(nftId))
         .build()
 
-    /** Times are seconds since the Ripple epoch. */
+    /** Times are seconds since the Ripple epoch. [amount] can be XRP or, with token escrow (XLS-85), a token. */
     fun escrowCreate(
         from: Address,
         key: PublicKey,
         fill: Autofill,
         destination: String,
-        drops: Long,
+        amount: CurrencyAmount,
         finishAfter: Long,
         cancelAfter: Long?,
     ): EscrowCreate = EscrowCreate.builder()
         .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
         .destination(Address.of(destination))
-        .amount(XrpCurrencyAmount.ofDrops(drops))
+        .amount(amount)
         .finishAfter(UnsignedLong.valueOf(finishAfter))
         .apply { if (cancelAfter != null) cancelAfter(UnsignedLong.valueOf(cancelAfter)) }
         .build()
+
+    fun escrowCancel(from: Address, key: PublicKey, fill: Autofill, owner: String, offerSequence: Long): EscrowCancel =
+        EscrowCancel.builder()
+            .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+            .owner(Address.of(owner))
+            .offerSequence(UnsignedInteger.valueOf(offerSequence))
+            .build()
 
     fun escrowFinish(from: Address, key: PublicKey, fill: Autofill, owner: String, offerSequence: Long): EscrowFinish =
         EscrowFinish.builder()
@@ -177,6 +214,97 @@ object LabTransactions {
         .amount(amount1)
         .amount2(amount2)
         .flags(AmmDepositFlags.TWO_ASSET)
+        .build()
+
+    /**
+     * A sell offer (the owner asks [amount] for the NFT) or a buy offer (anyone bids [amount]; [owner]
+     * is then required). [destination] limits who may accept a sell offer.
+     */
+    fun nftCreateOffer(
+        from: Address,
+        key: PublicKey,
+        fill: Autofill,
+        nftId: String,
+        amount: CurrencyAmount,
+        sell: Boolean,
+        owner: String? = null,
+        destination: String? = null,
+    ): NfTokenCreateOffer = NfTokenCreateOffer.builder()
+        .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+        .nfTokenId(NfTokenId.of(nftId))
+        .amount(amount)
+        .apply { if (!sell) owner(Address.of(requireNotNull(owner) { "A buy offer needs the NFT's owner." })) }
+        .apply { if (!destination.isNullOrBlank()) destination(Address.of(destination.trim())) }
+        .flags(NfTokenCreateOfferFlags.builder().tfSellToken(sell).build())
+        .build()
+
+    /** Accepts one side directly: pass [sellOffer] to buy, or [buyOffer] to sell to a bidder. */
+    fun nftAcceptOffer(
+        from: Address,
+        key: PublicKey,
+        fill: Autofill,
+        sellOffer: String? = null,
+        buyOffer: String? = null,
+    ): NfTokenAcceptOffer = NfTokenAcceptOffer.builder()
+        .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+        .apply { if (sellOffer != null) sellOffer(Hash256.of(sellOffer)) }
+        .apply { if (buyOffer != null) buyOffer(Hash256.of(buyOffer)) }
+        .build()
+
+    fun nftCancelOffer(from: Address, key: PublicKey, fill: Autofill, offerIds: List<String>): NfTokenCancelOffer =
+        NfTokenCancelOffer.builder()
+            .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+            .tokenOffers(offerIds.map { Hash256.of(it) })
+            .build()
+
+    /** Opens a payment channel. [settleDelaySeconds] is how long the payee has to claim after the payer asks to close. */
+    fun channelCreate(
+        from: Address,
+        key: PublicKey,
+        fill: Autofill,
+        destination: String,
+        drops: Long,
+        settleDelaySeconds: Long,
+    ): PaymentChannelCreate = PaymentChannelCreate.builder()
+        .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+        .destination(Address.of(destination))
+        .amount(XrpCurrencyAmount.ofDrops(drops))
+        .settleDelay(UnsignedInteger.valueOf(settleDelaySeconds))
+        .publicKey(key.base16Value())
+        .build()
+
+    fun channelFund(from: Address, key: PublicKey, fill: Autofill, channelId: String, drops: Long): PaymentChannelFund =
+        PaymentChannelFund.builder()
+            .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+            .channel(Hash256.of(channelId))
+            .amount(XrpCurrencyAmount.ofDrops(drops))
+            .build()
+
+    /**
+     * The payee redeems a signed claim ([claimDrops], [signature] and the payer's [payerPublicKey]), or
+     * either side closes the channel with [close]. With no claim it just requests the close.
+     */
+    fun channelClaim(
+        from: Address,
+        key: PublicKey,
+        fill: Autofill,
+        channelId: String,
+        claimDrops: Long? = null,
+        signature: String? = null,
+        payerPublicKey: String? = null,
+        close: Boolean = false,
+    ): PaymentChannelClaim = PaymentChannelClaim.builder()
+        .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+        .channel(Hash256.of(channelId))
+        .apply {
+            if (claimDrops != null && signature != null && payerPublicKey != null) {
+                balance(XrpCurrencyAmount.ofDrops(claimDrops))
+                amount(XrpCurrencyAmount.ofDrops(claimDrops))
+                signature(signature)
+                publicKey(payerPublicKey)
+            }
+        }
+        .flags(PaymentChannelClaimFlags.builder().tfClose(close).build())
         .build()
 
     internal fun hex(text: String): String = text.toByteArray(Charsets.UTF_8).joinToString("") { "%02X".format(it) }

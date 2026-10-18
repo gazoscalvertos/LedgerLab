@@ -21,10 +21,14 @@ ledger in real time, and grows into a set of hands-on demos of what the XRPL can
   leave the device. Mainnet payments ask for confirmation first.
 
 - **Feature labs**, each with a "How it works" panel showing the transaction JSON:
-  - **Tokens**: issue your own currency in three steps (enable rippling, open a trust line, issue) between two of your wallets
-  - **DEX**: live order book for any XRP/token pair, place buy and sell offers, cancel open offers
-  - **NFTs**: mint native NFTs with a URI, taxon and transferable flag, list and burn them
-  - **Escrow**: lock XRP until a time, watch the countdown, then release it
+  - **Tokens**: issue your own currency (enable rippling, open a trust line, issue) and send it on between holders
+  - **DEX**: live order book for any XRP/token pair, place buy and sell offers, cancel open offers. Tokens your wallets issue or hold show up as one-tap picks
+  - **NFTs**: pick an image, video or audio file, pin it to IPFS through Pinata, choose the metadata standard
+    (XLS-24, OpenSea style, or a bare media link), and mint with a royalty, transferable and XRP-only flags.
+    Then list NFTs for XRP or any token, bid, accept, buy and cancel offers, including private sales to one buyer
+  - **Escrow**: lock XRP or tokens (XLS-85 token escrow) until a time, watch the countdown, then release it or return it after expiry
+  - **Channels**: open an XRP payment channel, stream off-ledger claims signed on the phone, check them with
+    `channel_verify`, and redeem or close as the payee
   - **AMM**: inspect an XRP/token pool (reserves, price, LP tokens, fee), create one or add liquidity
   - **Explorer**: look up any account, transaction or ledger, with raw JSON and links between them
 
@@ -32,14 +36,20 @@ ledger in real time, and grows into a set of hands-on demos of what the XRPL can
 
 1. Open **Wallet**, create two wallets and activate both from the faucet.
 2. In **Tokens**, pick one as holder and the other as issuer, then run the three steps.
-3. Trade that token in **DEX**, seed an **AMM** pool with it, mint an **NFT**, or lock XRP in **Escrow**.
-4. Paste any hash from the activity lists into **Explorer**.
+3. Send the token to a third wallet, trade it in **DEX**, seed an **AMM** pool, lock it in **Escrow**, or price an **NFT** in it.
+4. In **Channels**, open a channel between two wallets, tap **Pay** a few times as the payer, then switch to the payee and redeem.
+5. Paste any hash from the activity lists into **Explorer**.
 
 ## Getting the APK
 
 Every pull request and push builds a debug APK in GitHub Actions (the **Android build** workflow, artifact
 `ledgerlab-debug-apk`). Each merge to `main` also refreshes the **latest** pre-release on the Releases page, so you
 can download `app-debug.apk` straight onto a phone running Android 8.0 or newer and allow installs from your browser.
+Builds are signed with the fixed debug key in `app/debug.keystore`, so a new build installs over the old one and keeps
+your wallets. It's a public test key: never use it for a store release.
+
+Minting from a file needs a free [Pinata](https://app.pinata.cloud) API key (the JWT), pasted once in the NFT lab and
+stored encrypted on the phone. Token escrow needs the TokenEscrow amendment; if a network replies `temDISABLED`, try Devnet.
 
 ## Project layout
 

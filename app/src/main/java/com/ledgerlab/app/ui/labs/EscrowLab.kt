@@ -33,6 +33,9 @@ import com.ledgerlab.app.ui.components.Panel
 import com.ledgerlab.app.ui.theme.LabColors
 import com.ledgerlab.app.ui.theme.Mono
 import com.ledgerlab.xrpl.Format
+import com.ledgerlab.app.data.StoredWallet
+import com.ledgerlab.app.ui.components.LabOutlineButton
+import com.ledgerlab.xrpl.labs.Asset
 import com.ledgerlab.xrpl.labs.EscrowEntry
 import com.ledgerlab.xrpl.labs.LabTransactions
 import com.ledgerlab.xrpl.wallet.Transactions
@@ -48,6 +51,8 @@ private const val RIPPLE_EPOCH_OFFSET = 946_684_800L
 fun rippleNow(): Long = System.currentTimeMillis() / 1000 - RIPPLE_EPOCH_OFFSET
 
 class EscrowViewModel(app: Application) : LabViewModel(app) {
+    override val usesTokens get() = true
+
     private val _escrows = MutableStateFlow<List<EscrowEntry>>(emptyList())
     val escrows: StateFlow<List<EscrowEntry>> = _escrows.asStateFlow()
 
@@ -56,22 +61,40 @@ class EscrowViewModel(app: Application) : LabViewModel(app) {
         _escrows.value = queries().escrows(wallet.address)
     }
 
-    fun create(destination: String, amount: String, releaseMinutes: String, cancelMinutes: String) {
-        val label = "Lock XRP in escrow"
+    fun create(destination: String, asset: Asset?, amount: String, releaseMinutes: String, cancelMinutes: String) {
+        val label = "Lock ${asset?.label ?: "funds"} in escrow"
         if (!WalletKeys.isValidAddress(destination)) return fail(label, "Enter a valid destination address.")
-        val drops = Transactions.parseXrp(amount) ?: return fail(label, "Enter an XRP amount.")
+        if (asset == null) return fail(label, "Check the token code and issuer.")
+        val value = amount.toBigDecimalOrNull()?.takeIf { it.signum() > 0 } ?: return fail(label, "Enter an amount.")
+        if (asset is Asset.Token && asset.issuer == selected.value?.address) {
+            return fail(label, "An issuer can't escrow its own token. Lock it from a holder's wallet.")
+        }
         val release = releaseMinutes.toLongOrNull()?.takeIf { it in 1..525_600 } ?: return fail(label, "Release after 1 or more minutes.")
-        val cancel = if (cancelMinutes.isBlank()) null else cancelMinutes.toLongOrNull()?.takeIf { it > release }
-            ?: return fail(label, "Cancel time must be later than the release time.")
+        val cancel = when {
+            // Token escrows must be able to expire, so give them an hour after release if no time was set.
+            cancelMinutes.isBlank() -> if (asset is Asset.Token) release + 60 else null
+            else -> cancelMinutes.toLongOrNull()?.takeIf { it > release }
+                ?: return fail(label, "Cancel time must be later than the release time.")
+        }
         val now = rippleNow()
         runTx(label) { a, k, f ->
-            LabTransactions.escrowCreate(a, k, f, destination.trim(), drops, now + release * 60, cancel?.let { now + it * 60 })
+            LabTransactions.escrowCreate(a, k, f, destination.trim(), asset.amount(value), now + release * 60, cancel?.let { now + it * 60 })
         }
+    }
+
+    /** Token escrow needs the issuer's permission, set once with an AccountSet flag. */
+    fun allowLocking(issuer: StoredWallet) = runTx("${issuer.label} allows token escrow", issuer) { a, k, f ->
+        LabTransactions.allowTrustLineLocking(a, k, f)
     }
 
     fun finish(escrow: EscrowEntry) {
         val seq = escrow.createSequence ?: return fail("Release escrow", "Couldn't find the EscrowCreate sequence for this escrow.")
-        runTx("Release ${Format.xrp(escrow.drops)}") { a, k, f -> LabTransactions.escrowFinish(a, k, f, escrow.owner, seq) }
+        runTx("Release ${Format.amount(escrow.amount)}") { a, k, f -> LabTransactions.escrowFinish(a, k, f, escrow.owner, seq) }
+    }
+
+    fun cancel(escrow: EscrowEntry) {
+        val seq = escrow.createSequence ?: return fail("Cancel escrow", "Couldn't find the EscrowCreate sequence for this escrow.")
+        runTx("Return ${Format.amount(escrow.amount)}") { a, k, f -> LabTransactions.escrowCancel(a, k, f, escrow.owner, seq) }
     }
 }
 
@@ -81,6 +104,7 @@ fun EscrowLab(onBack: () -> Unit, vm: EscrowViewModel = viewModel()) {
     val wallets by vm.wallets.collectAsStateWithLifecycle()
     val wallet by vm.selected.collectAsStateWithLifecycle()
     val escrows by vm.escrows.collectAsStateWithLifecycle()
+    val tokens by vm.tokens.collectAsStateWithLifecycle()
     val tx by vm.tx.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
     val accent = LabColors.Orange
@@ -88,6 +112,9 @@ fun EscrowLab(onBack: () -> Unit, vm: EscrowViewModel = viewModel()) {
     val otherWallet = wallets.firstOrNull { it.id != wallet?.id }
     var destination by rememberSaveable(otherWallet?.address) { mutableStateOf(otherWallet?.address ?: "") }
     var amount by rememberSaveable { mutableStateOf("10") }
+    var code by rememberSaveable { mutableStateOf("") }
+    var issuer by rememberSaveable { mutableStateOf("") }
+    val asset = assetOrNull(code, issuer)
     var release by rememberSaveable { mutableStateOf("1") }
     var cancel by rememberSaveable { mutableStateOf("") }
 
@@ -99,24 +126,32 @@ fun EscrowLab(onBack: () -> Unit, vm: EscrowViewModel = viewModel()) {
         }
     }
 
-    LabScaffold("Escrow", "Time-locked XRP", accent, network, vm::selectNetwork, onBack) {
+    LabScaffold("Escrow", "Time-locked XRP and tokens", accent, network, vm::selectNetwork, onBack) {
         if (wallets.isEmpty()) {
             item { NeedsWallet(accent) }
         } else {
             item {
-                Panel(accent = accent, title = "Lock XRP") {
+                Panel(accent = accent, title = "Lock funds") {
                     WalletChips(wallets, wallet, accent, { vm.selectWallet(it.id) })
                     Spacer(Modifier.height(12.dp))
+                    Text("Asset", style = MaterialTheme.typography.labelSmall, color = LabColors.TextSecondary)
+                    Spacer(Modifier.height(6.dp))
+                    AssetPicker(code, issuer, tokens.filter { it.issuer != wallet?.address }, accent) { c, i -> code = c; issuer = i }
+                    if (asset is Asset.Token) {
+                        Spacer(Modifier.height(8.dp))
+                        TokenEscrowNote(asset, wallets.firstOrNull { it.address == asset.issuer }, vm::allowLocking)
+                    }
+                    Spacer(Modifier.height(8.dp))
                     LabTextField(destination, { destination = it }, "Destination", Modifier.fillMaxWidth(), accent, mono = true)
                     Spacer(Modifier.height(8.dp))
-                    LabTextField(amount, { amount = it }, "Amount (XRP)", Modifier.fillMaxWidth(), accent, keyboardType = KeyboardType.Decimal)
+                    LabTextField(amount, { amount = it }, "Amount (${asset?.label ?: "token"})", Modifier.fillMaxWidth(), accent, keyboardType = KeyboardType.Decimal)
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         LabTextField(release, { release = it }, "Release after (min)", Modifier.weight(1f), accent, keyboardType = KeyboardType.Number)
                         LabTextField(cancel, { cancel = it }, "Cancel after (min)", Modifier.weight(1f), accent, keyboardType = KeyboardType.Number)
                     }
                     Spacer(Modifier.height(10.dp))
-                    LabButton("Create escrow", { vm.create(destination, amount, release, cancel) }, Modifier.fillMaxWidth(), accent)
+                    LabButton("Create escrow", { vm.create(destination, asset, amount, release, cancel) }, Modifier.fillMaxWidth(), accent)
                 }
             }
             item { TxStatusCard(tx, network, vm::clearTx) }
@@ -124,7 +159,7 @@ fun EscrowLab(onBack: () -> Unit, vm: EscrowViewModel = viewModel()) {
                 Panel(accent = accent, title = "Escrows involving this wallet") {
                     ErrorLine(error)
                     if (escrows.isEmpty()) Text("None yet.", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
-                    escrows.forEach { e -> EscrowRow(e, now) { vm.finish(e) } }
+                    escrows.forEach { e -> EscrowRow(e, now, wallet?.address, { vm.finish(e) }, { vm.cancel(e) }) }
                 }
             }
         }
@@ -136,13 +171,14 @@ fun EscrowLab(onBack: () -> Unit, vm: EscrowViewModel = viewModel()) {
                     "CancelAfter (optional) is when it can instead be returned to you with EscrowCancel.",
                     "Times are seconds since the Ripple epoch (1 January 2000), and the ledger uses its own close time, not your clock.",
                     "Escrows can also be locked by a crypto-condition, the basis for trustless cross-chain swaps.",
+                    "Token escrow (XLS-85) locks issued tokens the same way. The issuer must first set asfAllowTrustLineLocking, and the destination needs a trust line.",
                 ),
                 code = """
                     {
                       "TransactionType": "EscrowCreate",
                       "Account": "rOwner…",
                       "Destination": "rDestination…",
-                      "Amount": "${Transactions.parseXrp(amount) ?: 10_000_000}",
+                      "Amount": ${escrowAmountJson(asset, amount)},
                       "FinishAfter": ${now + (release.toLongOrNull() ?: 1) * 60}
                     }
                 """.trimIndent(),
@@ -153,21 +189,56 @@ fun EscrowLab(onBack: () -> Unit, vm: EscrowViewModel = viewModel()) {
 }
 
 @Composable
-private fun EscrowRow(escrow: EscrowEntry, now: Long, onFinish: () -> Unit) {
+private fun TokenEscrowNote(token: Asset.Token, issuerWallet: StoredWallet?, onAllow: (StoredWallet) -> Unit) {
+    Column {
+        Text(
+            "Token escrow needs the issuer to allow trust line locking, a cancel time (an hour after release if you leave it blank), and the TokenEscrow amendment on the network. If it says temDISABLED, switch to Devnet.",
+            style = MaterialTheme.typography.bodySmall,
+            color = LabColors.TextMuted,
+        )
+        if (issuerWallet != null) {
+            Spacer(Modifier.height(6.dp))
+            LabOutlineButton("Allow locking on ${issuerWallet.label} (issuer of ${token.currency})", { onAllow(issuerWallet) }, Modifier.fillMaxWidth(), LabColors.Orange)
+        }
+    }
+}
+
+@Composable
+private fun EscrowRow(escrow: EscrowEntry, now: Long, me: String?, onFinish: () -> Unit, onCancel: () -> Unit) {
     val finishAt = escrow.finishAfter
     val ready = finishAt == null || now > finishAt
+    val cancelAt = escrow.cancelAfter
+    val expired = cancelAt != null && now > cancelAt
     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(Format.xrp(escrow.drops), fontFamily = Mono, fontWeight = FontWeight.Bold, color = LabColors.Orange)
-            Text("to ${shortAddr(escrow.destination)}", fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = LabColors.TextSecondary)
+            Text(Format.amount(escrow.amount), fontFamily = Mono, fontWeight = FontWeight.Bold, color = LabColors.Orange)
             Text(
-                if (ready) "Ready to release" else "Unlocks in ${formatDuration(finishAt!! - now)}",
+                if (escrow.owner == me) "to ${shortAddr(escrow.destination)}" else "from ${shortAddr(escrow.owner)}",
+                fontFamily = Mono,
                 style = MaterialTheme.typography.bodySmall,
-                color = if (ready) LabColors.Matrix else LabColors.TextMuted,
+                color = LabColors.TextSecondary,
+            )
+            Text(
+                when {
+                    expired -> "Expired: can be returned to the owner"
+                    ready -> "Ready to release"
+                    else -> "Unlocks in ${formatDuration(finishAt!! - now)}"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (ready || expired) LabColors.Matrix else LabColors.TextMuted,
             )
         }
-        LabButton("Release", onFinish, accent = LabColors.Matrix, enabled = ready && escrow.createSequence != null)
+        if (expired) {
+            LabButton("Return", onCancel, accent = LabColors.Gold, enabled = escrow.createSequence != null)
+        } else {
+            LabButton("Release", onFinish, accent = LabColors.Matrix, enabled = ready && escrow.createSequence != null)
+        }
     }
+}
+
+private fun escrowAmountJson(asset: Asset?, amount: String): String = when (asset) {
+    is Asset.Token -> """{ "currency": "${asset.currency}", "issuer": "${shortAddr(asset.issuer)}", "value": "$amount" }"""
+    else -> "\"${Transactions.parseXrp(amount) ?: 10_000_000}\""
 }
 
 private fun formatDuration(seconds: Long): String {

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CandlestickChart
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Lock
@@ -40,10 +41,11 @@ enum class LabFeature(
     val available: Boolean = true,
 ) {
     WALLET("Wallet", "Create or import a wallet and fund it from the faucet", Icons.Outlined.AccountBalanceWallet, LabColors.Matrix),
-    TOKENS("Tokens", "Issue tokens and set up trust lines", Icons.Outlined.Token, LabColors.Gold),
+    TOKENS("Tokens", "Issue, hold and send your own tokens", Icons.Outlined.Token, LabColors.Gold),
     DEX("DEX", "Place offers on the built-in order book", Icons.Outlined.CandlestickChart, LabColors.Cyan),
-    NFTS("NFTs", "Mint, list and trade native NFTs", Icons.Outlined.Image, LabColors.Magenta),
-    ESCROW("Escrow", "Lock XRP until a time or condition", Icons.Outlined.Lock, LabColors.Orange),
+    NFTS("NFTs", "Mint to IPFS, then list and trade", Icons.Outlined.Image, LabColors.Magenta),
+    ESCROW("Escrow", "Lock XRP or tokens until a time", Icons.Outlined.Lock, LabColors.Orange),
+    CHANNELS("Channels", "Stream XRP micropayments off ledger", Icons.Outlined.Bolt, LabColors.Matrix),
     AMM("AMM", "Provide liquidity to automated market makers", Icons.Outlined.WaterDrop, LabColors.Violet),
     EXPLORER("Explorer", "Look up any account or transaction", Icons.Outlined.Search, LabColors.TextPrimary),
 }
