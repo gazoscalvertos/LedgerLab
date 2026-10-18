@@ -7,6 +7,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.VolunteerActivism
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -26,12 +31,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ledgerlab.app.data.StoredWallet
+import com.ledgerlab.app.ui.components.Actor
 import com.ledgerlab.app.ui.components.HowItWorks
 import com.ledgerlab.app.ui.components.LabButton
 import com.ledgerlab.app.ui.components.LabOutlineButton
 import com.ledgerlab.app.ui.components.LabScaffold
 import com.ledgerlab.app.ui.components.LabTextField
 import com.ledgerlab.app.ui.components.Panel
+import com.ledgerlab.app.ui.components.UseCaseHero
 import com.ledgerlab.app.ui.theme.LabColors
 import com.ledgerlab.app.ui.theme.Mono
 import com.ledgerlab.xrpl.Amount
@@ -200,7 +207,17 @@ fun CrowdfundLab(onBack: () -> Unit, vm: CrowdfundViewModel = viewModel()) {
         }
     }
 
-    LabScaffold("Crowdfunding", "All or nothing: pledges unlock only if the goal is met", accent, network, vm::selectNetwork, onBack) {
+    LabScaffold("Crowdfunding", "All or nothing: pledges unlock only if the goal is met", accent, network, vm::selectNetwork, onBack, features = listOf("Escrow", "Crypto-conditions", "EscrowCancel")) {
+        item {
+            UseCaseHero(
+                brand = "BackIt",
+                tagline = "All-or-nothing crowdfunding",
+                icon = Icons.Outlined.VolunteerActivism,
+                accent = accent,
+                actors = listOf(Actor("Backers", Icons.Outlined.Groups), Actor("Escrow", Icons.Outlined.Lock), Actor("Creator", Icons.Outlined.Person)),
+                links = listOf("pledge", "released if the goal is met"),
+            )
+        }
         if (wallets.size < 2) {
             item { NeedsWallet(accent, "A campaign needs a creator and at least one backer. Create and fund two or three wallets in the Wallet lab.") }
         } else {

@@ -8,6 +8,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Storefront
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -25,12 +30,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ledgerlab.app.data.StoredWallet
+import com.ledgerlab.app.ui.components.Actor
 import com.ledgerlab.app.ui.components.HowItWorks
 import com.ledgerlab.app.ui.components.LabButton
 import com.ledgerlab.app.ui.components.LabOutlineButton
 import com.ledgerlab.app.ui.components.LabScaffold
 import com.ledgerlab.app.ui.components.LabTextField
 import com.ledgerlab.app.ui.components.Panel
+import com.ledgerlab.app.ui.components.UseCaseHero
 import com.ledgerlab.app.ui.theme.LabColors
 import com.ledgerlab.app.ui.theme.Mono
 import com.ledgerlab.xrpl.Format
@@ -179,7 +186,17 @@ fun MeterLab(onBack: () -> Unit, vm: MeterViewModel = viewModel()) {
     var payeeId by rememberSaveable(wallet?.id) { mutableStateOf(others.firstOrNull()?.id) }
     val channel = channels.firstOrNull { it.id == (meter?.channelId ?: chosenId) } ?: channels.firstOrNull()
 
-    LabScaffold("Pay-per-minute", "Stream XRP by the second, settle once", accent, network, vm::selectNetwork, onBack) {
+    LabScaffold("Pay-per-minute", "Stream XRP by the second, settle once", accent, network, vm::selectNetwork, onBack, features = listOf("Payment channels", "Off-ledger claims", "channel_verify")) {
+        item {
+            UseCaseHero(
+                brand = "MeterPay",
+                tagline = "Pay by the second for what you use",
+                icon = Icons.Outlined.Timer,
+                accent = accent,
+                actors = listOf(Actor("Payer", Icons.Outlined.Person), Actor("Provider", Icons.Outlined.Storefront), Actor("Ledger", Icons.Outlined.Dns)),
+                links = listOf("signs a claim every second", "settles once"),
+            )
+        }
         if (wallets.size < 2) {
             item { NeedsWallet(accent, "A metered session has a payer and a provider. Create and fund two wallets in the Wallet lab.") }
         } else {

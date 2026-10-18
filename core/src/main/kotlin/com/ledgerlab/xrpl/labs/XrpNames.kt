@@ -1,5 +1,6 @@
 package com.ledgerlab.xrpl.labs
 
+import com.ledgerlab.xrpl.StreamParser
 import com.ledgerlab.xrpl.StreamParser.long
 import com.ledgerlab.xrpl.StreamParser.string
 import com.ledgerlab.xrpl.wallet.RpcException
@@ -148,3 +149,181 @@ class NameDirectory(private val rpc: XrplRpc, private val clio: XrplRpc) {
 }
 
 private fun JsonArray?.orEmpty(): List<kotlinx.serialization.json.JsonElement> = this ?: emptyList()
+
+enum class RecordType(val hint: String) {
+    A("IPv4 address, like 203.0.113.7"),
+    AAAA("IPv6 address, like 2001:db8::7"),
+    CNAME("Another name, like alice.xrp or example.com"),
+    TXT("Any text, like a verification code"),
+    ;
+
+    /** Null when [value] fits this type, otherwise what's wrong. */
+    fun check(value: String): String? {
+        val v = value.trim()
+        if (v.isEmpty()) return "Enter a value."
+        return when (this) {
+            A -> if (ipv4.matches(v) && v.split('.').all { it.toInt() in 0..255 }) null else "That isn't an IPv4 address."
+            AAAA -> if (isIpv6(v)) null else "That isn't an IPv6 address."
+            CNAME -> if (hostname.matches(v.lowercase().removeSuffix("."))) null else "That isn't a hostname."
+            TXT -> if (v.length <= 255) null else "TXT values are at most 255 characters."
+        }
+    }
+
+    private companion object {
+        val ipv4 = Regex("^\\d{1,3}(\\.\\d{1,3}){3}$")
+        val hostname = Regex("^([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9-]{2,63}$")
+
+        fun isIpv6(v: String): Boolean = v.contains(':') && runCatching { java.net.InetAddress.getByName(v) is java.net.Inet6Address }.getOrDefault(false) &&
+            v.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' || it == ':' || it == '.' }
+    }
+}
+
+/** A DNS-style record the owner of a name published on the ledger. */
+data class DnsRecord(
+    /** The full host, such as `www.alice.xrp` or `alice.xrp`. */
+    val name: String,
+    val type: RecordType,
+    val value: String,
+    val ttl: Long,
+    /** The account that signed it. Only counts while it owns the name the host sits under. */
+    val signer: String,
+    val txHash: String,
+    val ledgerIndex: Long,
+)
+
+/**
+ * Name records live in memos: the owner signs a no-op AccountSet whose memo says "set" or "delete" a
+ * record. Reading the owner's history in order gives the current zone. Nothing to deploy, and a record
+ * stops counting the moment the name changes hands, because the new owner's history is read instead.
+ */
+object NameRecords {
+    const val MEMO_TYPE = "xrpns/record"
+    const val DEFAULT_TTL = 3_600L
+    private val label = Regex("^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$")
+
+    /** `www` under `alice.xrp` -> `www.alice.xrp`; blank or `@` is the name itself. Null if invalid. */
+    fun hostName(host: String, base: String): String? {
+        val h = host.trim().lowercase().removeSuffix(".")
+        if (h.isEmpty() || h == "@") return base
+        val labels = h.split('.')
+        if (labels.size > 3 || labels.any { !label.matches(it) }) return null
+        return "$h.$base"
+    }
+
+    fun setMemo(name: String, type: RecordType, value: String, ttl: Long = DEFAULT_TTL): String = buildJsonObject {
+        put("op", "set")
+        put("name", name)
+        put("type", type.name)
+        put("value", value.trim())
+        put("ttl", ttl)
+    }.toString()
+
+    fun deleteMemo(name: String, type: RecordType, value: String): String = buildJsonObject {
+        put("op", "del")
+        put("name", name)
+        put("type", type.name)
+        put("value", value.trim())
+    }.toString()
+
+    /** Several TXT records can share a host; other types hold one value per host. */
+    internal fun key(name: String, type: RecordType, value: String) = if (type == RecordType.TXT) "$name|TXT|$value" else "$name|${type.name}"
+
+    /**
+     * Replays [ops] (memo JSON with the signer and tx details, oldest first) into the live records.
+     */
+    internal fun replay(ops: List<Triple<JsonObject, String, Pair<String, Long>>>): List<DnsRecord> {
+        val zone = LinkedHashMap<String, DnsRecord>()
+        ops.forEach { (o, signer, tx) ->
+            val name = o.string("name")?.lowercase() ?: return@forEach
+            val type = o.string("type")?.let { t -> RecordType.entries.firstOrNull { it.name == t } } ?: return@forEach
+            val value = o.string("value") ?: return@forEach
+            when (o.string("op")) {
+                "set" -> if (type.check(value) == null) {
+                    zone[key(name, type, value)] = DnsRecord(name, type, value.trim(), o.long("ttl") ?: DEFAULT_TTL, signer, tx.first, tx.second)
+                }
+                "del" -> zone.remove(key(name, type, value.trim()))
+            }
+        }
+        return zone.values.toList()
+    }
+}
+
+/** The answer to a forward lookup. */
+data class Resolution(val query: String, val name: NameRecord?, val records: List<DnsRecord>)
+
+/** Lookups for the public resolver, built on [NameDirectory]. Blocking. */
+class NameResolver(private val rpc: XrplRpc, private val directory: NameDirectory) {
+    /** Live records [owner] has published, from its recent history. */
+    fun recordsBy(owner: String): List<DnsRecord> {
+        val result = try {
+            rpc.call("account_tx", buildJsonObject {
+                put("account", owner)
+                put("limit", 400)
+                put("ledger_index_min", -1)
+                put("ledger_index_max", -1)
+                put("forward", true)
+            })
+        } catch (e: RpcException) {
+            if (e.error == "actNotFound") return emptyList()
+            throw e
+        }
+        val memoType = LabTransactions.hex(NameRecords.MEMO_TYPE)
+        val ops = (result["transactions"] as? JsonArray).orEmpty().mapNotNull { e ->
+            val entry = e as? JsonObject ?: return@mapNotNull null
+            val tx = (entry["tx_json"] ?: entry["tx"]) as? JsonObject ?: return@mapNotNull null
+            if (tx.string("Account") != owner) return@mapNotNull null
+            if ((entry["meta"] as? JsonObject)?.string("TransactionResult") != "tesSUCCESS") return@mapNotNull null
+            val memo = (tx["Memos"] as? JsonArray).orEmpty()
+                .mapNotNull { (it as? JsonObject)?.get("Memo") as? JsonObject }
+                .firstOrNull { it.string("MemoType").equals(memoType, ignoreCase = true) } ?: return@mapNotNull null
+            val json = memo.string("MemoData")?.let(::decodeHex)?.let { runCatching { StreamParser.json.parseToJsonElement(it) as? JsonObject }.getOrNull() }
+                ?: return@mapNotNull null
+            val hash = entry.string("hash") ?: tx.string("hash") ?: ""
+            val ledger = entry.long("ledger_index") ?: tx.long("ledger_index") ?: 0L
+            Triple(json, owner, hash to ledger)
+        }.sortedBy { it.third.second }
+        return NameRecords.replay(ops)
+    }
+
+    /**
+     * `www.pay.alice.xrp`: finds the longest registered name it sits under (pay.alice.xrp, else
+     * alice.xrp), then that name's owner's records for exactly this host.
+     */
+    fun resolve(query: String, registry: String): Resolution {
+        val host = query.trim().lowercase().removeSuffix(".").let { if (it.endsWith(".${XrpNames.TLD}")) it else "$it.${XrpNames.TLD}" }
+        val labels = host.removeSuffix(".${XrpNames.TLD}").split('.')
+        val base = (0 until labels.size).asSequence()
+            .map { labels.drop(it).joinToString(".") + ".${XrpNames.TLD}" }
+            .filter { it.removeSuffix(".${XrpNames.TLD}").count { c -> c == '.' } <= 1 }
+            .mapNotNull { candidate -> XrpNames.normalize(candidate)?.let { directory.resolve(it, registry) } }
+            .firstOrNull() ?: return Resolution(host, null, emptyList())
+        val owner = base.owner ?: return Resolution(host, base, emptyList())
+        return Resolution(host, base, recordsBy(owner).filter { it.name == host })
+    }
+
+    /**
+     * Reverse lookup. An XRPL address gives the names it owns; an IP gives every host whose A or AAAA
+     * record points at it, checked against current ownership.
+     */
+    fun reverse(query: String, registry: String): List<String> {
+        val q = query.trim()
+        val all = directory.names(registry).let { names ->
+            names + names.filter { it.owner != null }.flatMap { n -> runCatching { directory.subdomains(n.name, n.owner!!) }.getOrDefault(emptyList()) }
+        }
+        if (q.startsWith("r") && !q.contains('.') && !q.contains(':')) {
+            return all.filter { it.owner == q }.map { it.name }.sorted()
+        }
+        val ip = q.lowercase()
+        return all.filter { it.owner != null }.groupBy { it.owner!! }.flatMap { (owner, owned) ->
+            val bases = owned.map { it.name }
+            runCatching { recordsBy(owner) }.getOrDefault(emptyList())
+                .filter { (it.type == RecordType.A || it.type == RecordType.AAAA) && it.value.lowercase() == ip }
+                .filter { r -> bases.any { r.name == it || r.name.endsWith(".$it") } }
+                .map { it.name }
+        }.distinct().sorted()
+    }
+
+    private fun decodeHex(hex: String): String = runCatching {
+        String(hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray(), Charsets.UTF_8)
+    }.getOrDefault(hex)
+}

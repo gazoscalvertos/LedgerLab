@@ -1,6 +1,9 @@
 package com.ledgerlab.app.ui.labs
 
 import android.app.Application
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -10,6 +13,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Autorenew
+import androidx.compose.material.icons.outlined.FitnessCenter
+import androidx.compose.material.icons.outlined.Movie
+import androidx.compose.material.icons.outlined.Newspaper
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Storefront
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,18 +34,22 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ledgerlab.app.data.StoredWallet
+import com.ledgerlab.app.ui.components.Actor
 import com.ledgerlab.app.ui.components.HowItWorks
 import com.ledgerlab.app.ui.components.LabButton
 import com.ledgerlab.app.ui.components.LabOutlineButton
 import com.ledgerlab.app.ui.components.LabScaffold
 import com.ledgerlab.app.ui.components.LabTextField
 import com.ledgerlab.app.ui.components.Panel
+import com.ledgerlab.app.ui.components.UseCaseHero
 import com.ledgerlab.app.ui.theme.LabColors
 import com.ledgerlab.app.ui.theme.Mono
 import com.ledgerlab.xrpl.Amount
@@ -113,7 +129,17 @@ fun SubscriptionsLab(onBack: () -> Unit, vm: SubscriptionsViewModel = viewModel(
     val incoming = checks.filter { it.to == wallet?.address }
     val outgoing = checks.filter { it.from == wallet?.address }
 
-    LabScaffold("Subscriptions", "Pay by Check: the merchant pulls, you stay in control", accent, network, vm::selectNetwork, onBack) {
+    LabScaffold("Subscriptions", "Pay by Check: the merchant pulls, you stay in control", accent, network, vm::selectNetwork, onBack, features = listOf("Checks", "InvoiceID", "CheckCash")) {
+        item {
+            UseCaseHero(
+                brand = "SubCheck",
+                tagline = "Subscriptions without handing over a card",
+                icon = Icons.Outlined.Autorenew,
+                accent = accent,
+                actors = listOf(Actor("Customer", Icons.Outlined.Person), Actor("Merchant", Icons.Outlined.Storefront)),
+                links = listOf("writes a Check each period"),
+            )
+        }
         if (wallets.size < 2) {
             item { NeedsWallet(accent, "A subscription has a customer and a merchant. Create and fund two wallets in the Wallet lab.") }
         } else {
@@ -129,8 +155,8 @@ fun SubscriptionsLab(onBack: () -> Unit, vm: SubscriptionsViewModel = viewModel(
                     Text("Merchant", style = MaterialTheme.typography.labelSmall, color = LabColors.TextSecondary)
                     WalletChips(others, others.firstOrNull { it.id == merchantId }, LabColors.Gold, { merchantId = it.id })
                     Spacer(Modifier.height(8.dp))
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PLANS.forEach { p -> LabChip("${p.name} ${Format.xrp(p.drops)}", planName == p.name, accent) { planName = p.name } }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PLANS.forEach { p -> PlanCard(p, planName == p.name, accent, Modifier.weight(1f)) { planName = p.name } }
                     }
                     Spacer(Modifier.height(8.dp))
                     LabTextField(period, { period = it.filter(Char::isDigit) }, "Billing period (minutes)", Modifier.fillMaxWidth(), accent, keyboardType = KeyboardType.Number)
@@ -214,5 +240,30 @@ private fun CheckList(
                 }
             }
         }
+    }
+}
+
+private fun iconFor(plan: Plan) = when (plan.name) {
+    "Streaming" -> Icons.Outlined.Movie
+    "News" -> Icons.Outlined.Newspaper
+    else -> Icons.Outlined.FitnessCenter
+}
+
+@Composable
+private fun PlanCard(plan: Plan, selected: Boolean, accent: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
+    Column(
+        modifier.clip(shape)
+            .background(if (selected) accent.copy(alpha = 0.18f) else LabColors.Surface)
+            .border(1.dp, if (selected) accent else LabColors.Outline, shape)
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(iconFor(plan), contentDescription = null, tint = if (selected) accent else LabColors.TextSecondary)
+        Spacer(Modifier.height(6.dp))
+        Text(plan.name, fontWeight = FontWeight.SemiBold, color = LabColors.TextPrimary)
+        Text(Format.xrp(plan.drops), fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = if (selected) accent else LabColors.TextSecondary)
+        Text("per period", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
     }
 }

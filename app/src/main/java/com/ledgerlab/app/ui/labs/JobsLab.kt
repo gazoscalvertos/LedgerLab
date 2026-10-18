@@ -8,6 +8,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Brush
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Work
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,12 +31,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ledgerlab.app.data.StoredWallet
+import com.ledgerlab.app.ui.components.Actor
 import com.ledgerlab.app.ui.components.HowItWorks
 import com.ledgerlab.app.ui.components.LabButton
 import com.ledgerlab.app.ui.components.LabOutlineButton
 import com.ledgerlab.app.ui.components.LabScaffold
 import com.ledgerlab.app.ui.components.LabTextField
 import com.ledgerlab.app.ui.components.Panel
+import com.ledgerlab.app.ui.components.UseCaseHero
 import com.ledgerlab.app.ui.theme.LabColors
 import com.ledgerlab.app.ui.theme.Mono
 import com.ledgerlab.xrpl.Format
@@ -227,7 +234,17 @@ fun JobsLab(onBack: () -> Unit, vm: JobsViewModel = viewModel()) {
         }
     }
 
-    LabScaffold("Freelance jobs", "Escrowed pay, released when the work is accepted", accent, network, vm::selectNetwork, onBack) {
+    LabScaffold("Freelance jobs", "Escrowed pay, released when the work is accepted", accent, network, vm::selectNetwork, onBack, features = listOf("Escrow", "Crypto-conditions", "CancelAfter")) {
+        item {
+            UseCaseHero(
+                brand = "GigLock",
+                tagline = "Get paid for finished work, guaranteed",
+                icon = Icons.Outlined.Work,
+                accent = accent,
+                actors = listOf(Actor("Client", Icons.Outlined.Person), Actor("Escrow", Icons.Outlined.Lock), Actor("Freelancer", Icons.Outlined.Brush)),
+                links = listOf("locks the budget", "secret releases it"),
+            )
+        }
         if (wallets.size < 2) {
             item { NeedsWallet(accent, "A job has a client and a freelancer. Create and fund two wallets in the Wallet lab.") }
         } else {

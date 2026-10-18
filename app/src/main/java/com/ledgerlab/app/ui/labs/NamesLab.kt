@@ -1,6 +1,9 @@
 package com.ledgerlab.app.ui.labs
 
 import android.app.Application
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,6 +11,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -17,6 +28,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -24,21 +36,29 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ledgerlab.app.data.StoredWallet
+import com.ledgerlab.app.ui.components.Actor
 import com.ledgerlab.app.ui.components.HowItWorks
 import com.ledgerlab.app.ui.components.LabButton
 import com.ledgerlab.app.ui.components.LabOutlineButton
 import com.ledgerlab.app.ui.components.LabScaffold
 import com.ledgerlab.app.ui.components.LabTextField
 import com.ledgerlab.app.ui.components.Panel
+import com.ledgerlab.app.ui.components.UseCaseHero
 import com.ledgerlab.app.ui.theme.LabColors
 import com.ledgerlab.app.ui.theme.Mono
 import com.ledgerlab.xrpl.Format
+import com.ledgerlab.xrpl.labs.DnsRecord
 import com.ledgerlab.xrpl.labs.LabTransactions
 import com.ledgerlab.xrpl.labs.NameDirectory
 import com.ledgerlab.xrpl.labs.NameRecord
+import com.ledgerlab.xrpl.labs.NameRecords
+import com.ledgerlab.xrpl.labs.NameResolver
 import com.ledgerlab.xrpl.labs.NftOffer
+import com.ledgerlab.xrpl.labs.RecordType
+import com.ledgerlab.xrpl.labs.Resolution
 import com.ledgerlab.xrpl.labs.XrpNames
 import com.ledgerlab.xrpl.wallet.Transactions
+import com.ledgerlab.xrpl.wallet.WalletKeys
 import com.ledgerlab.xrpl.wallet.XrplRpc
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -55,6 +75,8 @@ data class NamesState(
     val listings: List<NameListing> = emptyList(),
     /** False when only rippled answered, so owners and subdomains can't be listed. */
     val indexed: Boolean = true,
+    /** Records the selected wallet has published for names it owns. */
+    val records: List<DnsRecord> = emptyList(),
 )
 
 class NamesViewModel(app: Application) : LabViewModel(app) {
@@ -90,7 +112,67 @@ class NamesViewModel(app: Application) : LabViewModel(app) {
                 .filter { it.destination == null || it.destination == me || it.owner == me }
                 .map { NameListing(record, it) }
         }.sortedBy { (it.offer.amount as? com.ledgerlab.xrpl.Amount.Xrp)?.drops ?: Long.MAX_VALUE }
-        _state.value = NamesState(registry.address, all, listings, indexed)
+        val mine = all.filter { it.owner == me }.map { it.name }
+        val records = if (me == null || mine.isEmpty()) emptyList() else runCatching { resolver().recordsBy(me) }.getOrDefault(emptyList())
+            .filter { r -> mine.any { r.name == it || r.name.endsWith(".$it") } }
+        _state.value = NamesState(registry.address, all, listings, indexed, records)
+    }
+
+    private fun resolver() = NameResolver(rpc(), directory())
+
+    private val _lookup = MutableStateFlow<Resolution?>(null)
+    /** The last forward lookup. */
+    val lookup: StateFlow<Resolution?> = _lookup.asStateFlow()
+
+    private val _reverse = MutableStateFlow<Pair<String, List<String>>?>(null)
+    /** The last reverse lookup: the query and the names that point back at it. */
+    val reverse: StateFlow<Pair<String, List<String>>?> = _reverse.asStateFlow()
+
+    /** The owner signs one transaction that publishes (or replaces) a record. */
+    fun setRecord(base: NameRecord, host: String, type: RecordType, value: String, ttlText: String) {
+        val label = "Publish record"
+        val owner = selected.value?.takeIf { it.address == base.owner } ?: return fail(label, "Switch to the wallet that owns ${base.name}.")
+        val name = NameRecords.hostName(host, base.name) ?: return fail(label, "Hosts use letters, digits and hyphens, like www or api.v2.")
+        type.check(value)?.let { return fail(label, it) }
+        val ttl = ttlText.ifBlank { "${NameRecords.DEFAULT_TTL}" }.toLongOrNull()?.takeIf { it in 60..604_800 } ?: return fail(label, "TTL is in seconds, from 60 to 604800.")
+        runTx("$name ${type.name} ${value.trim()}", wallet = owner) { a, k, f -> LabTransactions.nameRecord(a, k, f, NameRecords.setMemo(name, type, value, ttl)) }
+    }
+
+    fun deleteRecord(record: DnsRecord) {
+        val owner = selected.value?.takeIf { it.address == record.signer } ?: return fail("Delete record", "Switch to the wallet that published it.")
+        runTx("Delete ${record.name} ${record.type.name}", wallet = owner) { a, k, f ->
+            LabTransactions.nameRecord(a, k, f, NameRecords.deleteMemo(record.name, record.type, record.value))
+        }
+    }
+
+    /** Public forward lookup: anyone can do this, no wallet needed. */
+    fun resolveName(query: String) {
+        val registry = registry() ?: return fail("Look up", "Pick a registry wallet.")
+        if (query.isBlank()) return fail("Look up", "Enter a name, like www.alice.xrp.")
+        runWork("Look up ${query.trim()}") { step ->
+            step("Finding the owner")
+            val r = resolver().resolve(query, registry.address)
+            _lookup.value = r
+            when {
+                r.name == null -> "${r.query} isn't registered."
+                r.records.isEmpty() -> "${r.query} has no records yet."
+                else -> "${r.records.size} record${if (r.records.size == 1) "" else "s"} for ${r.query}."
+            }
+        }
+    }
+
+    /** Reverse lookup by IP (PTR-style) or by XRPL address. */
+    fun reverseLookup(query: String) {
+        val registry = registry() ?: return fail("Reverse lookup", "Pick a registry wallet.")
+        val q = query.trim()
+        val isAddress = WalletKeys.isValidAddress(q)
+        if (!isAddress && RecordType.A.check(q) != null && RecordType.AAAA.check(q) != null) return fail("Reverse lookup", "Enter an IP address or an XRPL address.")
+        runWork("Reverse lookup $q") { step ->
+            step(if (isAddress) "Listing names this account owns" else "Scanning owners' records for $q")
+            val names = resolver().reverse(q, registry.address)
+            _reverse.value = q to names
+            if (names.isEmpty()) "Nothing points at $q." else "${names.size} name${if (names.size == 1) "" else "s"} point at $q."
+        }
     }
 
     /**
@@ -184,7 +266,7 @@ class NamesViewModel(app: Application) : LabViewModel(app) {
     }
 }
 
-private enum class NamesTab(val label: String) { REGISTER("Register"), MINE("My names"), MARKET("Market"), SEND("Send") }
+private enum class NamesTab(val label: String) { REGISTER("Register"), MINE("My names"), DNS("DNS"), LOOKUP("Lookup"), MARKET("Market"), SEND("Send") }
 
 @Composable
 fun NamesLab(onBack: () -> Unit, vm: NamesViewModel = viewModel()) {
@@ -197,7 +279,17 @@ fun NamesLab(onBack: () -> Unit, vm: NamesViewModel = viewModel()) {
     val accent = LabColors.Cyan
     var tab by rememberSaveable { mutableStateOf(NamesTab.REGISTER) }
 
-    LabScaffold(".xrp names", "Own a name, sell subdomains, get paid by name", accent, network, vm::selectNetwork, onBack) {
+    LabScaffold(".xrp names", "Own a name, sell subdomains, get paid by name", accent, network, vm::selectNetwork, onBack, features = listOf("NFTs", "Transfer fees", "Memos", "Clio nfts_by_issuer")) {
+        item {
+            UseCaseHero(
+                brand = "XRPNS",
+                tagline = "Names, records and a resolver on the ledger",
+                icon = Icons.Outlined.Language,
+                accent = accent,
+                actors = listOf(Actor("Registry", Icons.Outlined.AccountBalance), Actor("Owner", Icons.Outlined.Person), Actor("Visitors", Icons.Outlined.Public)),
+                links = listOf("mints the name NFT", "publishes records"),
+            )
+        }
         if (wallets.size < 2) {
             item { NeedsWallet(accent, "One wallet plays the registry and another buys names. Create and fund two (three is more fun) in the Wallet lab.") }
         } else {
@@ -206,7 +298,7 @@ fun NamesLab(onBack: () -> Unit, vm: NamesViewModel = viewModel()) {
                     Text("Acting as", style = MaterialTheme.typography.labelSmall, color = LabColors.TextSecondary)
                     WalletChips(wallets, wallet, accent, { vm.selectWallet(it.id) })
                     Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         NamesTab.entries.forEach { t -> LabChip(t.label, tab == t, LabColors.Gold) { tab = t } }
                     }
                 }
@@ -225,6 +317,8 @@ fun NamesLab(onBack: () -> Unit, vm: NamesViewModel = viewModel()) {
             when (tab) {
                 NamesTab.REGISTER -> item { RegisterTab(vm, state, wallets, wallet, accent) }
                 NamesTab.MINE -> item { MyNamesTab(vm, state, wallet, accent) }
+                NamesTab.DNS -> item { DnsTab(vm, state, wallet, accent) }
+                NamesTab.LOOKUP -> item { LookupTab(vm, accent) }
                 NamesTab.MARKET -> item { NameMarketTab(vm, state, wallet, accent) }
                 NamesTab.SEND -> item { SendTab(vm, state, accent) }
             }
@@ -237,6 +331,8 @@ fun NamesLab(onBack: () -> Unit, vm: NamesViewModel = viewModel()) {
                     "Every name carries a 5% TransferFee, so the registry earns on every resale without any contract code.",
                     "The owner of alice.xrp mints pay.alice.xrp under the subdomain taxon and sells it like any NFT. A subdomain only counts while its issuer still owns the parent.",
                     "Resolving a name is a lookup: Clio's nfts_by_issuer lists the registry's names with their current owners, then you pay that address.",
+                    "DNS records (A, AAAA, CNAME, TXT) are memos the owner signs on a no-op AccountSet. The resolver finds a name's current owner and replays their record memos in order, so a sale hands the zone to the new owner automatically.",
+                    "Reverse lookups scan the owners' records for an IP, the way a PTR record points an address back to a name.",
                     "This is a mockup: a real service would run the registry on a server that watches for payments, and would need rules for renewals and disputes.",
                 ),
                 code = """
@@ -420,5 +516,125 @@ private fun SendTab(vm: NamesViewModel, state: NamesState, accent: Color) {
         LabTextField(amount, { amount = it }, "Amount (XRP)", Modifier.fillMaxWidth(), accent, keyboardType = KeyboardType.Decimal)
         Spacer(Modifier.height(10.dp))
         LabButton("Send", { vm.pay(to, amount) }, Modifier.fillMaxWidth(), accent, enabled = name != null)
+    }
+}
+
+@Composable
+private fun DnsTab(vm: NamesViewModel, state: NamesState, wallet: StoredWallet?, accent: Color) {
+    val mine = state.all.filter { it.owner == wallet?.address }
+    var baseId by rememberSaveable(wallet?.address) { mutableStateOf(mine.firstOrNull()?.nftId) }
+    val base = mine.firstOrNull { it.nftId == baseId } ?: mine.firstOrNull()
+    var host by rememberSaveable { mutableStateOf("@") }
+    var type by rememberSaveable { mutableStateOf(RecordType.A) }
+    var value by rememberSaveable { mutableStateOf("") }
+    var ttl by rememberSaveable { mutableStateOf("3600") }
+    if (base == null) {
+        Panel(accent = accent, title = "DNS records") {
+            Text("Own a name first. Register one, or buy one in the Market, then publish records for it here.", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+        }
+        return
+    }
+    val zone = state.records.filter { it.name == base.name || it.name.endsWith(".${base.name}") }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Panel(accent = accent, title = "Zone") {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                mine.forEach { n -> LabChip(n.name, n.nftId == base.nftId, accent) { baseId = n.nftId } }
+            }
+            Spacer(Modifier.height(10.dp))
+            ZoneFile(base.name, zone, accent, onDelete = vm::deleteRecord)
+        }
+        Panel(accent = accent, title = "Add a record") {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                LabTextField(host, { host = it.trim().lowercase().take(60) }, "Host (@ = the name)", Modifier.weight(1f), accent, mono = true)
+                LabTextField(ttl, { ttl = it.filter(Char::isDigit) }, "TTL (s)", Modifier.weight(0.6f), accent, keyboardType = KeyboardType.Number)
+            }
+            Text(
+                (NameRecords.hostName(host, base.name) ?: "not a valid host") + "  →",
+                fontFamily = Mono,
+                style = MaterialTheme.typography.bodySmall,
+                color = LabColors.TextSecondary,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                RecordType.entries.forEach { t -> LabChip(t.name, type == t, LabColors.Gold) { type = t } }
+            }
+            Spacer(Modifier.height(8.dp))
+            LabTextField(value, { value = it.take(255) }, type.hint, Modifier.fillMaxWidth(), accent, mono = true)
+            type.check(value)?.takeIf { value.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = LabColors.Danger) }
+            Spacer(Modifier.height(10.dp))
+            LabButton("Sign and publish", { vm.setRecord(base, host, type, value, ttl) }, Modifier.fillMaxWidth(), accent, enabled = type.check(value) == null)
+            Text(
+                "One signature from your wallet. The record sits in a memo, so it's public and follows the name: sell it and the new owner's records take over.",
+                style = MaterialTheme.typography.bodySmall,
+                color = LabColors.TextMuted,
+            )
+        }
+    }
+}
+
+/** Records laid out like a zone file. */
+@Composable
+private fun ZoneFile(origin: String, records: List<DnsRecord>, accent: Color, onDelete: ((DnsRecord) -> Unit)? = null) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(LabColors.Background).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text("\$ORIGIN $origin.", fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+        if (records.isEmpty()) Text("; no records yet", fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+        records.forEach { r ->
+            val host = if (r.name == origin) "@" else r.name.removeSuffix(".$origin")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(host, fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = LabColors.TextPrimary, modifier = Modifier.width(72.dp))
+                Text("${r.ttl}", fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted, modifier = Modifier.width(48.dp))
+                Text(r.type.name, fontFamily = Mono, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = LabColors.Gold, modifier = Modifier.width(52.dp))
+                Text(if (r.type == RecordType.TXT) "\"${r.value}\"" else r.value, fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = accent, modifier = Modifier.weight(1f))
+                if (onDelete != null) Text("✕", color = LabColors.Danger, modifier = Modifier.clickable { onDelete(r) }.padding(start = 6.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun LookupTab(vm: NamesViewModel, accent: Color) {
+    val lookup by vm.lookup.collectAsStateWithLifecycle()
+    val reverse by vm.reverse.collectAsStateWithLifecycle()
+    var query by rememberSaveable { mutableStateOf("alice.xrp") }
+    var rquery by rememberSaveable { mutableStateOf("") }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Panel(accent = accent, title = "Resolve a name") {
+            Text("The public resolver: anyone can look up a name, no wallet or account needed.", style = MaterialTheme.typography.bodySmall, color = LabColors.TextSecondary)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                LabTextField(query, { query = it.trim().lowercase() }, "www.alice.xrp", Modifier.weight(1f), accent, mono = true)
+                LabButton("Resolve", { vm.resolveName(query) }, accent = accent)
+            }
+            lookup?.let { r ->
+                Spacer(Modifier.height(10.dp))
+                Text(";; ${r.query}", fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+                when (val n = r.name) {
+                    null -> Text("NXDOMAIN: not registered", fontFamily = Mono, color = LabColors.Danger)
+                    else -> {
+                        KeyValue("Zone", n.name)
+                        KeyValue("Owner", n.owner?.let(::shortAddr) ?: "unknown")
+                        Spacer(Modifier.height(6.dp))
+                        ZoneFile(n.name, r.records, accent)
+                    }
+                }
+            }
+        }
+        Panel(accent = accent, title = "Reverse lookup") {
+            Text("Which names point at an IP (like a PTR record), or which names an XRPL address owns.", style = MaterialTheme.typography.bodySmall, color = LabColors.TextSecondary)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                LabTextField(rquery, { rquery = it.trim() }, "203.0.113.7 or r…", Modifier.weight(1f), accent, mono = true)
+                LabButton("Find", { vm.reverseLookup(rquery) }, accent = accent)
+            }
+            reverse?.let { (q, names) ->
+                Spacer(Modifier.height(10.dp))
+                Text(";; $q", fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+                if (names.isEmpty()) Text("no names", fontFamily = Mono, color = LabColors.TextMuted)
+                names.forEach { Text("$q  PTR  $it.", fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = accent) }
+            }
+        }
     }
 }
