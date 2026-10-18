@@ -47,4 +47,14 @@ class DashboardStatsTest {
         stats.onEvent(ledger(5, 10, 100))
         assertEquals(1L, stats.snapshot().ledgersSeen)
     }
+
+    @Test
+    fun resetClearsEverything() {
+        val stats = DashboardStats()
+        stats.onEvent(ledger(1, 10, 0))
+        stats.onEvent(ledger(2, 10, 4_000))
+        stats.onEvent(payment(2, 9_000_000))
+        stats.reset()
+        assertEquals(DashboardSnapshot(), stats.snapshot())
+    }
 }

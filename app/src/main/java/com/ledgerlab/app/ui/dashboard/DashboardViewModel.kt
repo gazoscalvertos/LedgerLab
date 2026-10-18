@@ -25,7 +25,6 @@ import kotlinx.coroutines.launch
 class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("ledgerlab", Context.MODE_PRIVATE)
     private val client = XrplStreamClient()
-    private val stats = DashboardStats()
     private var streamJob: Job? = null
 
     private val _network = MutableStateFlow(XrplNetwork.fromName(prefs.getString(KEY_NETWORK, null)))
@@ -57,7 +56,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun connect(network: XrplNetwork) {
         streamJob?.cancel()
-        stats.reset()
+        // Each network gets brand-new stats, so nothing from the previous ledger carries over.
+        val stats = DashboardStats()
         _snapshot.value = DashboardSnapshot()
         _connection.value = ConnectionState.CONNECTING
         // Everything below runs on the main thread, so the stats need no locking.
