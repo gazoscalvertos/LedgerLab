@@ -35,6 +35,26 @@ android {
     buildFeatures {
         compose = true
     }
+
+    packaging {
+        resources {
+            // xrpl4j pulls in BouncyCastle, Jackson and Guava, which ship overlapping metadata files.
+            excludes += setOf(
+                "/META-INF/{AL2.0,LGPL2.1}",
+                "/META-INF/DEPENDENCIES",
+                "/META-INF/INDEX.LIST",
+                "/META-INF/LICENSE*",
+                "/META-INF/NOTICE*",
+                "/META-INF/versions/9/OSGI-INF/MANIFEST.MF",
+                "/META-INF/*.kotlin_module",
+            )
+        }
+    }
+}
+
+configurations.configureEach {
+    // Guava (via xrpl4j) already contains ListenableFuture; drop the stub androidx pulls in.
+    exclude(group = "com.google.guava", module = "listenablefuture")
 }
 
 dependencies {

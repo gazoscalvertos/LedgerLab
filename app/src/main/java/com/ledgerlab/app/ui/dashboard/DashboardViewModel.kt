@@ -1,9 +1,9 @@
 package com.ledgerlab.app.ui.dashboard
 
 import android.app.Application
-import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.ledgerlab.app.LedgerLabApp
 import com.ledgerlab.app.data.XrplStreamClient
 import com.ledgerlab.xrpl.DashboardSnapshot
 import com.ledgerlab.xrpl.DashboardStats
@@ -23,12 +23,11 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class DashboardViewModel(app: Application) : AndroidViewModel(app) {
-    private val prefs = app.getSharedPreferences("ledgerlab", Context.MODE_PRIVATE)
+    private val networkStore = (app as LedgerLabApp).networkStore
     private val client = XrplStreamClient()
     private var streamJob: Job? = null
 
-    private val _network = MutableStateFlow(XrplNetwork.fromName(prefs.getString(KEY_NETWORK, null)))
-    val network: StateFlow<XrplNetwork> = _network.asStateFlow()
+    val network: StateFlow<XrplNetwork> = networkStore.network
 
     private val _connection = MutableStateFlow(ConnectionState.CONNECTING)
     val connection: StateFlow<ConnectionState> = _connection.asStateFlow()
@@ -44,15 +43,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     val transactions: SharedFlow<StreamTx> = _transactions.asSharedFlow()
 
     init {
-        connect(_network.value)
+        viewModelScope.launch { networkStore.network.collect { connect(it) } }
     }
 
-    fun selectNetwork(network: XrplNetwork) {
-        if (network == _network.value) return
-        _network.value = network
-        prefs.edit().putString(KEY_NETWORK, network.name).apply()
-        connect(network)
-    }
+    fun selectNetwork(network: XrplNetwork) = networkStore.select(network)
 
     private fun connect(network: XrplNetwork) {
         streamJob?.cancel()
@@ -90,7 +84,6 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private companion object {
-        const val KEY_NETWORK = "network"
         const val SNAPSHOT_THROTTLE_MS = 400L
     }
 }

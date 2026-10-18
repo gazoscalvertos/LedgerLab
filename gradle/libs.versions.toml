@@ -9,6 +9,7 @@ okhttp = "4.12.0"
 serializationJson = "1.7.3"
 coroutines = "1.8.1"
 junit = "4.13.2"
+xrpl4j = "6.0.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -26,6 +27,7 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhtt
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serializationJson" }
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+xrpl4j-core = { group = "org.xrpl", name = "xrpl4j-core", version.ref = "xrpl4j" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]
