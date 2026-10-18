@@ -72,6 +72,50 @@ object Tickets {
 /** An NFT from Clio's issuer index, with its current owner. */
 data class IssuedNft(val id: String, val owner: String?, val uri: String?, val transferable: Boolean, val burned: Boolean = false)
 
+/** A cheque waiting to be cashed. [sendMax] is the most it can pay. */
+data class LedgerCheck(
+    val id: String,
+    val from: String,
+    val to: String,
+    val sendMax: com.ledgerlab.xrpl.Amount?,
+    /** Ripple epoch; null if it never expires. */
+    val expiration: Long?,
+    val invoiceId: String?,
+)
+
+/** An on-ledger credential: [issuer] vouches that [subject] is [type]. */
+data class LedgerCredential(
+    val issuer: String,
+    val subject: String,
+    val type: String,
+    val accepted: Boolean,
+    val expiration: Long?,
+    val uri: String?,
+)
+
+data class SignerList(val quorum: Int, val signers: List<String>)
+
+/** Account flags the mockup apps care about, from account_info. */
+data class AccountFlags(val raw: Long) {
+    val defaultRipple: Boolean get() = raw and 0x0080_0000L != 0L
+    val requireAuth: Boolean get() = raw and 0x0004_0000L != 0L
+    val allowClawback: Boolean get() = raw and 0x8000_0000L != 0L
+    val depositAuth: Boolean get() = raw and 0x0100_0000L != 0L
+    val masterDisabled: Boolean get() = raw and 0x0010_0000L != 0L
+}
+
+/** Plain text <-> the hex the ledger stores for memos, credential types and URIs. */
+object LedgerText {
+    fun encode(text: String) = LabTransactions.hex(text)
+
+    fun decode(hex: String): String = runCatching {
+        String(hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray(), Charsets.UTF_8)
+    }.getOrDefault(hex)
+
+    /** A 256-bit ID derived from text, for fields such as a Check's InvoiceID. */
+    fun idFor(text: String): String = Notary.sha256Hex(text.toByteArray())
+}
+
 /** Shared reads for the mockup apps. Blocking. */
 class AppQueries(private val rpc: XrplRpc, private val clio: XrplRpc) {
     /** NFTs an account issued under [taxon], burned ones included, via Clio's nfts_by_issuer. */
@@ -135,6 +179,69 @@ class AppQueries(private val rpc: XrplRpc, private val clio: XrplRpc) {
                 closeTime = tx.long("date") ?: entry.long("date") ?: entry.string("close_time_iso")?.let(::isoToRipple),
             )
         }
+    }
+
+    fun checks(address: String): List<LedgerCheck> = objects(address, "check").mapNotNull { o ->
+        LedgerCheck(
+            id = o.string("index") ?: return@mapNotNull null,
+            from = o.string("Account") ?: return@mapNotNull null,
+            to = o.string("Destination") ?: return@mapNotNull null,
+            sendMax = com.ledgerlab.xrpl.StreamParser.parseAmount(o["SendMax"]),
+            expiration = o.long("Expiration"),
+            invoiceId = o.string("InvoiceID"),
+        )
+    }
+
+    fun credentials(address: String): List<LedgerCredential> = objects(address, "credential").mapNotNull { o ->
+        LedgerCredential(
+            issuer = o.string("Issuer") ?: return@mapNotNull null,
+            subject = o.string("Subject") ?: return@mapNotNull null,
+            type = o.string("CredentialType")?.let(::decodeHex) ?: return@mapNotNull null,
+            accepted = (o.long("Flags") ?: 0L) and 0x0001_0000L != 0L,
+            expiration = o.long("Expiration"),
+            uri = o.string("URI")?.let(::decodeHex),
+        )
+    }
+
+    fun signerList(address: String): SignerList? {
+        val o = objects(address, "signer_list").firstOrNull() ?: return null
+        val entries = (o["SignerEntries"] as? JsonArray).orEmpty().mapNotNull {
+            ((it as? JsonObject)?.get("SignerEntry") as? JsonObject)?.string("Account")
+        }
+        return SignerList((o.long("SignerQuorum") ?: 0L).toInt(), entries)
+    }
+
+    fun flags(address: String): AccountFlags? = try {
+        val result = rpc.call("account_info", buildJsonObject {
+            put("account", address)
+            put("ledger_index", "validated")
+        })
+        (result["account_data"] as? JsonObject)?.long("Flags")?.let(::AccountFlags)
+    } catch (e: RpcException) {
+        if (e.error == "actNotFound") null else throw e
+    }
+
+    /** The open ledger's base fee and index, for transactions that must be built ahead of signing. */
+    fun feeAndLedger(): Pair<Long, Long> {
+        val fee = rpc.call("fee")
+        val base = ((fee["drops"] as? JsonObject)?.long("base_fee")) ?: 10L
+        return base to (fee.long("ledger_current_index") ?: 0L)
+    }
+
+    fun nextSequence(address: String): Long? = rpc.accountInfo(address, ledger = "current")?.sequence
+
+    private fun objects(address: String, type: String): List<JsonObject> {
+        val result = try {
+            rpc.call("account_objects", buildJsonObject {
+                put("account", address)
+                put("ledger_index", "validated")
+                put("type", type)
+            })
+        } catch (e: RpcException) {
+            if (e.error == "actNotFound") return emptyList()
+            throw e
+        }
+        return (result["account_objects"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
     }
 
     /** The validated metadata's NFT ID or offer ID for a transaction that created one. */

@@ -25,6 +25,8 @@ data class TrustLine(
     val limit: String,
     val issuedByMe: Boolean = false,
     val holder: String? = null,
+    /** The issuer has approved this line (only matters when the issuer uses RequireAuth). */
+    val authorized: Boolean = false,
 ) {
     val token: Asset.Token get() = Asset.Token(currency, issuer)
 }
@@ -109,6 +111,7 @@ class LabQueries(private val rpc: XrplRpc) {
             limit = (if (mine) peerLimit else limit).stripTrailingZeros().toPlainString(),
             issuedByMe = mine,
             holder = if (mine) peer else address,
+            authorized = (o[if (mine) "authorized" else "peer_authorized"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "true",
         )
     }
 

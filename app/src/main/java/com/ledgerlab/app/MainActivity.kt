@@ -15,16 +15,21 @@ import com.ledgerlab.app.ui.components.LabFeature
 import com.ledgerlab.app.ui.dashboard.DashboardScreen
 import com.ledgerlab.app.ui.dashboard.DashboardViewModel
 import com.ledgerlab.app.ui.labs.AmmLab
+import com.ledgerlab.app.ui.labs.BadgesLab
 import com.ledgerlab.app.ui.labs.ChannelsLab
+import com.ledgerlab.app.ui.labs.CrowdfundLab
 import com.ledgerlab.app.ui.labs.DexLab
 import com.ledgerlab.app.ui.labs.EscrowLab
 import com.ledgerlab.app.ui.labs.ExplorerLab
 import com.ledgerlab.app.ui.labs.JobsLab
+import com.ledgerlab.app.ui.labs.LoyaltyLab
 import com.ledgerlab.app.ui.labs.MeterLab
 import com.ledgerlab.app.ui.labs.NamesLab
 import com.ledgerlab.app.ui.labs.NftLab
 import com.ledgerlab.app.ui.labs.NotaryLab
+import com.ledgerlab.app.ui.labs.SubscriptionsLab
 import com.ledgerlab.app.ui.labs.TicketsLab
+import com.ledgerlab.app.ui.labs.TreasuryLab
 import com.ledgerlab.app.ui.labs.TokensLab
 import com.ledgerlab.app.ui.theme.LedgerLabTheme
 import com.ledgerlab.app.ui.wallet.WalletScreen
@@ -57,6 +62,11 @@ class MainActivity : ComponentActivity() {
                     LabFeature.TICKETS -> TicketsLab(onBack = back)
                     LabFeature.METER -> MeterLab(onBack = back)
                     LabFeature.JOBS -> JobsLab(onBack = back)
+                    LabFeature.CROWDFUND -> CrowdfundLab(onBack = back)
+                    LabFeature.LOYALTY -> LoyaltyLab(onBack = back)
+                    LabFeature.SUBSCRIPTIONS -> SubscriptionsLab(onBack = back)
+                    LabFeature.TREASURY -> TreasuryLab(onBack = back)
+                    LabFeature.BADGES -> BadgesLab(onBack = back)
                     LabFeature.AMM -> AmmLab(onBack = back)
                     LabFeature.EXPLORER -> ExplorerLab(onBack = back)
                     null -> {

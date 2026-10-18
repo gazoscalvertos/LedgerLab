@@ -12,10 +12,21 @@ import org.xrpl.xrpl4j.model.flags.PaymentChannelClaimFlags
 import org.xrpl.xrpl4j.model.flags.OfferCreateFlags
 import org.xrpl.xrpl4j.model.flags.TrustSetFlags
 import org.xrpl.xrpl4j.model.ledger.Issue
+import org.xrpl.xrpl4j.model.ledger.SignerEntry
+import org.xrpl.xrpl4j.model.ledger.SignerEntryWrapper
 import org.xrpl.xrpl4j.model.transactions.AccountSet
 import org.xrpl.xrpl4j.model.transactions.Address
 import org.xrpl.xrpl4j.model.transactions.AmmCreate
 import org.xrpl.xrpl4j.model.transactions.AmmDeposit
+import org.xrpl.xrpl4j.model.transactions.CheckCancel
+import org.xrpl.xrpl4j.model.transactions.CheckCash
+import org.xrpl.xrpl4j.model.transactions.CheckCreate
+import org.xrpl.xrpl4j.model.transactions.Clawback
+import org.xrpl.xrpl4j.model.transactions.CredentialAccept
+import org.xrpl.xrpl4j.model.transactions.CredentialCreate
+import org.xrpl.xrpl4j.model.transactions.CredentialDelete
+import org.xrpl.xrpl4j.model.transactions.CredentialType
+import org.xrpl.xrpl4j.model.transactions.CredentialUri
 import org.xrpl.xrpl4j.model.transactions.CurrencyAmount
 import org.xrpl.xrpl4j.model.transactions.EscrowCancel
 import org.xrpl.xrpl4j.model.transactions.EscrowCreate
@@ -37,6 +48,7 @@ import org.xrpl.xrpl4j.model.transactions.Payment
 import org.xrpl.xrpl4j.model.transactions.PaymentChannelClaim
 import org.xrpl.xrpl4j.model.transactions.PaymentChannelCreate
 import org.xrpl.xrpl4j.model.transactions.PaymentChannelFund
+import org.xrpl.xrpl4j.model.transactions.SignerListSet
 import org.xrpl.xrpl4j.model.transactions.TradingFee
 import org.xrpl.xrpl4j.model.transactions.TransferFee
 import org.xrpl.xrpl4j.model.transactions.TrustSet
@@ -376,6 +388,116 @@ object LabTransactions {
         }
         .flags(PaymentChannelClaimFlags.builder().tfClose(close).build())
         .build()
+
+    /** Turns on one account flag, such as RequireAuth or AllowTrustLineClawback. */
+    fun accountSetFlag(from: Address, key: PublicKey, fill: Autofill, flag: AccountSet.AccountSetFlag): AccountSet = AccountSet.builder()
+        .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+        .setFlag(flag)
+        .build()
+
+    /** The issuer approves [holder]'s trust line for [currency] (needed when the issuer has RequireAuth). */
+    fun authorizeHolder(from: Address, key: PublicKey, fill: Autofill, holder: String, currency: String): TrustSet = TrustSet.builder()
+        .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+        .limitAmount(IssuedCurrencyAmount.builder().currency(Currencies.encode(currency)).issuer(Address.of(holder)).value("0").build())
+        .flags(TrustSetFlags.builder().tfSetfAuth(true).build())
+        .build()
+
+    /** The issuer takes [value] of its token back from [holder]. For a trust line token the amount's "issuer" is the holder. */
+    fun clawback(from: Address, key: PublicKey, fill: Autofill, holder: String, currency: String, value: BigDecimal): Clawback = Clawback.builder()
+        .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+        .amount(IssuedCurrencyAmount.builder().currency(Currencies.encode(currency)).issuer(Address.of(holder)).value(value.stripTrailingZeros().toPlainString()).build())
+        .build()
+
+    /** A cheque for up to [sendMax] that [destination] can cash until [expiration] (Ripple epoch). */
+    fun checkCreate(
+        from: Address,
+        key: PublicKey,
+        fill: Autofill,
+        destination: String,
+        sendMax: CurrencyAmount,
+        expiration: Long?,
+        invoiceIdHex: String? = null,
+    ): CheckCreate = CheckCreate.builder()
+        .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+        .destination(Address.of(destination))
+        .sendMax(sendMax)
+        .apply { if (expiration != null) expiration(UnsignedInteger.valueOf(expiration)) }
+        .apply { if (invoiceIdHex != null) invoiceId(Hash256.of(invoiceIdHex)) }
+        .build()
+
+    fun checkCash(from: Address, key: PublicKey, fill: Autofill, checkId: String, amount: CurrencyAmount): CheckCash = CheckCash.builder()
+        .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+        .checkId(Hash256.of(checkId))
+        .amount(amount)
+        .build()
+
+    fun checkCancel(from: Address, key: PublicKey, fill: Autofill, checkId: String): CheckCancel = CheckCancel.builder()
+        .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+        .checkId(Hash256.of(checkId))
+        .build()
+
+    /** Makes [signers] (weight 1 each) able to sign for this account once [quorum] of them agree. An empty list removes it. */
+    fun signerListSet(from: Address, key: PublicKey, fill: Autofill, quorum: Int, signers: List<String>): SignerListSet = SignerListSet.builder()
+        .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+        .signerQuorum(UnsignedInteger.valueOf(quorum.toLong()))
+        .signerEntries(signers.map { SignerEntryWrapper.of(SignerEntry.builder().account(Address.of(it)).signerWeight(UnsignedInteger.ONE).build()) })
+        .build()
+
+    /**
+     * A payment from a multi-signed account. It has no signing key of its own and costs
+     * (signers + 1) x the base fee. Sequence and expiry are fixed up front so every signer signs the same bytes.
+     */
+    fun multiSigPayment(
+        from: String,
+        destination: String,
+        drops: Long,
+        sequence: Long,
+        baseFeeDrops: Long,
+        signers: Int,
+        lastLedgerSequence: Long,
+        memo: String? = null,
+    ): Payment = Payment.builder()
+        .account(Address.of(from))
+        .signingPublicKey(PublicKey.MULTI_SIGN_PUBLIC_KEY)
+        .fee(XrpCurrencyAmount.ofDrops(baseFeeDrops * (signers + 1)))
+        .sequence(UnsignedInteger.valueOf(sequence))
+        .lastLedgerSequence(UnsignedInteger.valueOf(lastLedgerSequence))
+        .destination(Address.of(destination))
+        .amount(XrpCurrencyAmount.ofDrops(drops))
+        .apply { if (memo != null) addMemos(MemoWrapper.builder().memo(Memo.withPlaintext(memo).build()).build()) }
+        .build()
+
+    /** An issuer vouches for [subject]: a credential of [type] (plain text, such as "KYC"), optionally expiring. */
+    fun credentialCreate(
+        from: Address,
+        key: PublicKey,
+        fill: Autofill,
+        subject: String,
+        type: String,
+        expiration: Long? = null,
+        uri: String? = null,
+    ): CredentialCreate = CredentialCreate.builder()
+        .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+        .subject(Address.of(subject))
+        .credentialType(CredentialType.of(hex(type)))
+        .apply { if (expiration != null) expiration(UnsignedLong.valueOf(expiration)) }
+        .apply { if (!uri.isNullOrBlank()) uri(CredentialUri.of(hex(uri))) }
+        .build()
+
+    fun credentialAccept(from: Address, key: PublicKey, fill: Autofill, issuer: String, type: String): CredentialAccept = CredentialAccept.builder()
+        .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+        .issuer(Address.of(issuer))
+        .credentialType(CredentialType.of(hex(type)))
+        .build()
+
+    /** Removes a credential. The issuer passes [subject]; the subject passes [issuer]. */
+    fun credentialDelete(from: Address, key: PublicKey, fill: Autofill, type: String, subject: String? = null, issuer: String? = null): CredentialDelete =
+        CredentialDelete.builder()
+            .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+            .credentialType(CredentialType.of(hex(type)))
+            .apply { if (subject != null) subject(Address.of(subject)) }
+            .apply { if (issuer != null) issuer(Address.of(issuer)) }
+            .build()
 
     internal fun unhex(hex: String): ByteArray = hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
 

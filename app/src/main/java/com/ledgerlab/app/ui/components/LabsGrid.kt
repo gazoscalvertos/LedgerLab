@@ -13,19 +13,24 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.Autorenew
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CandlestickChart
 import androidx.compose.material.icons.outlined.ConfirmationNumber
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Loyalty
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.Token
 import androidx.compose.material.icons.outlined.Verified
+import androidx.compose.material.icons.outlined.VolunteerActivism
 import androidx.compose.material.icons.outlined.WaterDrop
 import androidx.compose.material.icons.outlined.Work
+import androidx.compose.material.icons.outlined.WorkspacePremium
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,7 +42,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.ledgerlab.app.ui.theme.LabColors
 
-/** LedgerLab's screens. [mockup] ones are small apps built from several features, shown in their own section. */
+/** LedgerLab's screens. [mockup] ones are use cases: small apps built from several features, shown in their own section. */
 enum class LabFeature(
     val title: String,
     val blurb: String,
@@ -59,6 +64,11 @@ enum class LabFeature(
     TICKETS("Event tickets", "NFT tickets with royalties and door check-in", Icons.Outlined.ConfirmationNumber, LabColors.Magenta, mockup = true),
     METER("Pay-per-minute", "Stream XRP by the second, settle once", Icons.Outlined.Timer, LabColors.Cyan, mockup = true),
     JOBS("Freelance jobs", "Escrowed pay, released when work is accepted", Icons.Outlined.Work, LabColors.Orange, mockup = true),
+    CROWDFUND("Crowdfunding", "All-or-nothing pledges held in escrow", Icons.Outlined.VolunteerActivism, LabColors.Matrix, mockup = true),
+    LOYALTY("Loyalty points", "A shop token with approval and clawback", Icons.Outlined.Loyalty, LabColors.Violet, mockup = true),
+    SUBSCRIPTIONS("Subscriptions", "Monthly Checks the merchant cashes", Icons.Outlined.Autorenew, LabColors.Cyan, mockup = true),
+    TREASURY("Shared treasury", "A club wallet that needs 2 of 3 to spend", Icons.Outlined.AccountBalance, LabColors.Gold, mockup = true),
+    BADGES("Verified badges", "On-ledger credentials anyone can check", Icons.Outlined.WorkspacePremium, LabColors.Magenta, mockup = true),
 }
 
 @Composable

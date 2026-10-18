@@ -6,7 +6,10 @@ import org.xrpl.xrpl4j.codec.addresses.SeedCodec
 import org.xrpl.xrpl4j.crypto.keys.Base58EncodedSecret
 import org.xrpl.xrpl4j.crypto.keys.PublicKey
 import org.xrpl.xrpl4j.crypto.keys.Seed
+import org.xrpl.xrpl4j.crypto.signing.MultiSignedTransaction
+import org.xrpl.xrpl4j.crypto.signing.Signature
 import org.xrpl.xrpl4j.crypto.signing.bc.BcSignatureService
+import org.xrpl.xrpl4j.model.transactions.Signer
 import org.xrpl.xrpl4j.model.client.channels.UnsignedClaim
 import org.xrpl.xrpl4j.model.transactions.Address
 import org.xrpl.xrpl4j.model.transactions.Hash256
@@ -27,6 +30,9 @@ data class WalletKeyInfo(
 )
 
 data class SignedTx(val blob: String, val hash: String)
+
+/** One signer's approval of a multi-signed transaction. */
+data class SignerShare(val address: String, val publicKey: String, val signature: String)
 
 /** Key generation, import and signing, all done on the device with xrpl4j. Secrets never leave the phone. */
 object WalletKeys {
@@ -85,5 +91,28 @@ object WalletKeys {
             .amount(XrpCurrencyAmount.ofDrops(drops))
             .build()
         return signer.sign(keyPair.privateKey(), claim).base16Value()
+    }
+
+    /** Signs [tx] as one of a multi-signed account's signers. Nothing is submitted. */
+    fun multiSign(secret: String, tx: Transaction): SignerShare {
+        val keyPair = Seed.fromBase58EncodedSecret(Base58EncodedSecret.of(secret.trim())).deriveKeyPair()
+        val signature = signer.multiSign(keyPair.privateKey(), tx)
+        return SignerShare(keyPair.publicKey().deriveAddress().value(), keyPair.publicKey().base16Value(), signature.base16Value())
+    }
+
+    /** Combines the signers' approvals into one blob ready for `submit`. */
+    fun <T : Transaction> assembleMultiSigned(tx: T, shares: Collection<SignerShare>): SignedTx {
+        val signed = MultiSignedTransaction.builder<T>()
+            .unsignedTransaction(tx)
+            .signerSet(
+                shares.map {
+                    Signer.builder()
+                        .signingPublicKey(PublicKey.fromBase16EncodedPublicKey(it.publicKey))
+                        .transactionSignature(Signature.fromBase16(it.signature))
+                        .build()
+                }.toSet(),
+            )
+            .build()
+        return SignedTx(signed.signedTransactionBytes().hexValue(), signed.hash().value())
     }
 }
