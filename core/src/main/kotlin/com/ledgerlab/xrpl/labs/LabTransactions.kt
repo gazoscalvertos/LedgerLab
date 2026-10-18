@@ -21,6 +21,8 @@ import org.xrpl.xrpl4j.model.transactions.EscrowCreate
 import org.xrpl.xrpl4j.model.transactions.EscrowFinish
 import org.xrpl.xrpl4j.model.transactions.Hash256
 import org.xrpl.xrpl4j.model.transactions.IssuedCurrencyAmount
+import org.xrpl.xrpl4j.model.transactions.Memo
+import org.xrpl.xrpl4j.model.transactions.MemoWrapper
 import org.xrpl.xrpl4j.model.transactions.NfTokenAcceptOffer
 import org.xrpl.xrpl4j.model.transactions.NfTokenBurn
 import org.xrpl.xrpl4j.model.transactions.NfTokenCancelOffer
@@ -104,12 +106,19 @@ object LabTransactions {
             .flags(TrustSetFlags.builder().tfSetNoRipple().build())
             .build()
 
-    fun payment(from: Address, key: PublicKey, fill: Autofill, destination: String, amount: CurrencyAmount): Payment =
-        Payment.builder()
-            .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
-            .destination(Address.of(destination))
-            .amount(amount)
-            .build()
+    fun payment(
+        from: Address,
+        key: PublicKey,
+        fill: Autofill,
+        destination: String,
+        amount: CurrencyAmount,
+        memo: String? = null,
+    ): Payment = Payment.builder()
+        .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+        .destination(Address.of(destination))
+        .amount(amount)
+        .apply { if (memo != null) addMemos(MemoWrapper.builder().memo(Memo.withPlaintext(memo).build()).build()) }
+        .build()
 
     /** An offer to give [gets] in exchange for [pays]. */
     fun offerCreate(from: Address, key: PublicKey, fill: Autofill, gets: CurrencyAmount, pays: CurrencyAmount): OfferCreate =

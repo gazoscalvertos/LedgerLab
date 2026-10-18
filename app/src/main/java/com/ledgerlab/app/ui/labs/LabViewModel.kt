@@ -148,6 +148,23 @@ abstract class LabViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * One transaction inside a [runWork] flow: signs as [wallet], waits for validation, and throws with
+     * the result code (plus a hint) if it didn't succeed, so a multi-step flow stops at the failing step.
+     */
+    protected fun submitAs(
+        wallet: StoredWallet,
+        what: String,
+        step: (String) -> Unit,
+        build: (Address, PublicKey, Autofill) -> Transaction,
+    ): TxOutcome {
+        val outcome = TxPipeline.run(rpc(), walletStore.secretOf(wallet), wallet.address, onStep = { step("$what: $it") }, build = build)
+        if (!outcome.success) {
+            throw IllegalStateException("$what failed: ${outcome.result}" + (explainResult(outcome.result)?.let { ". $it" } ?: ""))
+        }
+        return outcome
+    }
+
     protected fun fail(label: String, message: String) {
         _tx.value = TxStatus.Failed(label, message)
     }
@@ -160,6 +177,7 @@ abstract class LabViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val message = withContext(Dispatchers.IO) { work { step -> _tx.value = TxStatus.Working(label, step) } }
                 _tx.value = TxStatus.Note(label, message)
+                reload()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

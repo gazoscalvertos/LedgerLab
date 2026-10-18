@@ -32,6 +32,7 @@ class LabTransactionsTest {
             { a, k -> LabTransactions.payment(a, k, fill, other, token.amount(BigDecimal("25.5"))) },
             { a, k -> LabTransactions.offerCreate(a, k, fill, Asset.Xrp.amount(BigDecimal("10")), token.amount(BigDecimal("5"))) },
             { a, k -> LabTransactions.offerCancel(a, k, fill, 4) },
+            { a, k -> LabTransactions.payment(a, k, fill, other, Asset.Xrp.amount(BigDecimal.TEN), memo = XrpNames.registerMemo("alice.xrp")) },
             { a, k -> LabTransactions.nftMint(a, k, fill, "https://example.com/nft.json", 7, transferable = true) },
             { a, k -> LabTransactions.nftMint(a, k, fill, "ipfs://bafy", 1, transferable = true, transferFee = 2_500, onlyXrp = true) },
             { a, k -> LabTransactions.escrowCreate(a, k, fill, other, Asset.Xrp.amount(BigDecimal.ONE), 800_000_000, 800_000_600) },
