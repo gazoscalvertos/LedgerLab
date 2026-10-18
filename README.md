@@ -20,10 +20,20 @@ ledger in real time, and grows into a set of hands-on demos of what the XRPL can
   [xrpl4j](https://github.com/XRPLF/xrpl4j); secrets are stored encrypted with an Android Keystore AES key and never
   leave the device. Mainnet payments ask for confirmation first.
 
-## Coming next
+- **Feature labs**, each with a "How it works" panel showing the transaction JSON:
+  - **Tokens**: issue your own currency in three steps (enable rippling, open a trust line, issue) between two of your wallets
+  - **DEX**: live order book for any XRP/token pair, place buy and sell offers, cancel open offers
+  - **NFTs**: mint native NFTs with a URI, taxon and transferable flag, list and burn them
+  - **Escrow**: lock XRP until a time, watch the countdown, then release it
+  - **AMM**: inspect an XRP/token pool (reserves, price, LP tokens, fee), create one or add liquidity
+  - **Explorer**: look up any account, transaction or ledger, with raw JSON and links between them
 
-1. Feature demos: tokens and trust lines, DEX offers, NFTs, escrow and AMM, each with a "how it works" panel
-2. Explorer view for any account or transaction, plus screenshots
+## Try it on Testnet
+
+1. Open **Wallet**, create two wallets and activate both from the faucet.
+2. In **Tokens**, pick one as holder and the other as issuer, then run the three steps.
+3. Trade that token in **DEX**, seed an **AMM** pool with it, mint an **NFT**, or lock XRP in **Escrow**.
+4. Paste any hash from the activity lists into **Explorer**.
 
 ## Getting the APK
 
@@ -35,7 +45,7 @@ can download `app-debug.apk` straight onto a phone running Android 8.0 or newer 
 
 | Module | What it holds |
 | --- | --- |
-| `core` | Plain Kotlin/JVM: network definitions, the WebSocket stream parser, rolling dashboard stats, and the wallet layer (keys, signing, JSON-RPC client, faucet), with unit tests |
+| `core` | Plain Kotlin/JVM: network definitions, the WebSocket stream parser, rolling dashboard stats, the wallet layer (keys, signing, JSON-RPC client, faucet) and the labs layer (transaction builders, queries, submit-and-validate pipeline), with unit tests |
 | `app` | The Jetpack Compose Android app: the stream client, view model, theme and dashboard components |
 
 Build locally with `./gradlew :core:test :app:assembleDebug` (JDK 17 and the Android SDK required).

@@ -37,9 +37,9 @@ enum class LabFeature(
     val blurb: String,
     val icon: ImageVector,
     val color: Color,
-    val available: Boolean = false,
+    val available: Boolean = true,
 ) {
-    WALLET("Wallet", "Create or import a wallet and fund it from the faucet", Icons.Outlined.AccountBalanceWallet, LabColors.Matrix, available = true),
+    WALLET("Wallet", "Create or import a wallet and fund it from the faucet", Icons.Outlined.AccountBalanceWallet, LabColors.Matrix),
     TOKENS("Tokens", "Issue tokens and set up trust lines", Icons.Outlined.Token, LabColors.Gold),
     DEX("DEX", "Place offers on the built-in order book", Icons.Outlined.CandlestickChart, LabColors.Cyan),
     NFTS("NFTs", "Mint, list and trade native NFTs", Icons.Outlined.Image, LabColors.Magenta),

@@ -14,6 +14,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ledgerlab.app.ui.components.LabFeature
 import com.ledgerlab.app.ui.dashboard.DashboardScreen
 import com.ledgerlab.app.ui.dashboard.DashboardViewModel
+import com.ledgerlab.app.ui.labs.AmmLab
+import com.ledgerlab.app.ui.labs.DexLab
+import com.ledgerlab.app.ui.labs.EscrowLab
+import com.ledgerlab.app.ui.labs.ExplorerLab
+import com.ledgerlab.app.ui.labs.NftLab
+import com.ledgerlab.app.ui.labs.TokensLab
 import com.ledgerlab.app.ui.theme.LedgerLabTheme
 import com.ledgerlab.app.ui.wallet.WalletScreen
 import com.ledgerlab.app.ui.wallet.WalletViewModel
@@ -26,15 +32,22 @@ class MainActivity : ComponentActivity() {
             LedgerLabTheme {
                 // A one-level stack is all the app needs: the dashboard, or one lab on top of it.
                 var open by rememberSaveable { mutableStateOf<LabFeature?>(null) }
-                BackHandler(enabled = open != null) { open = null }
+                val back = { open = null }
+                BackHandler(enabled = open != null, onBack = back)
 
                 when (open) {
                     LabFeature.WALLET -> {
                         val vm: WalletViewModel = viewModel()
                         val state by vm.state.collectAsStateWithLifecycle()
-                        WalletScreen(state, vm, onBack = { open = null })
+                        WalletScreen(state, vm, onBack = back)
                     }
-                    else -> {
+                    LabFeature.TOKENS -> TokensLab(onBack = back)
+                    LabFeature.DEX -> DexLab(onBack = back)
+                    LabFeature.NFTS -> NftLab(onBack = back)
+                    LabFeature.ESCROW -> EscrowLab(onBack = back)
+                    LabFeature.AMM -> AmmLab(onBack = back)
+                    LabFeature.EXPLORER -> ExplorerLab(onBack = back)
+                    null -> {
                         val vm: DashboardViewModel = viewModel()
                         val network by vm.network.collectAsStateWithLifecycle()
                         val connection by vm.connection.collectAsStateWithLifecycle()
