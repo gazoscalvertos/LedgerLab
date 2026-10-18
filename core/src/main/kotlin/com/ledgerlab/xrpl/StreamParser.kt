@@ -15,13 +15,13 @@ object StreamParser {
     const val SUBSCRIBE_REQUEST =
         """{"id":"ledgerlab","command":"subscribe","streams":["ledger","transactions"]}"""
 
-    private val json = Json { ignoreUnknownKeys = true }
+    internal val json = Json { ignoreUnknownKeys = true }
 
     fun parse(text: String, receivedAtMs: Long = System.currentTimeMillis()): StreamEvent? {
         val root = runCatching { json.parseToJsonElement(text) as? JsonObject }.getOrNull() ?: return null
         return when (root.string("type")) {
             "ledgerClosed" -> parseLedger(root, receivedAtMs)
-            "transaction" -> parseTransaction(root)
+            "transaction" -> parseTx(root)?.let { StreamEvent.Transaction(it) }
             "response" -> parseResponse(root)
             else -> null
         }
@@ -42,25 +42,28 @@ object StreamParser {
         )
     }
 
-    private fun parseTransaction(root: JsonObject): StreamEvent? {
-        val tx = (root["tx_json"] ?: root["transaction"]) as? JsonObject ?: return null
+    /**
+     * Parses one transaction envelope: a stream message, an `account_tx` entry (`tx`) or a `tx` response.
+     * When the envelope has no nested transaction, [root] itself is treated as the transaction.
+     */
+    fun parseTx(root: JsonObject): StreamTx? {
+        val tx = (root["tx_json"] ?: root["transaction"] ?: root["tx"]) as? JsonObject ?: root
         val meta = root["meta"] as? JsonObject
         val type = tx.string("TransactionType") ?: return null
         val amount = parseAmount(meta?.get("delivered_amount"))
             ?: parseAmount(tx["Amount"])
             ?: parseAmount(tx["TakerGets"])
-        return StreamEvent.Transaction(
-            StreamTx(
-                hash = root.string("hash") ?: tx.string("hash") ?: "",
-                type = type,
-                category = TxCategory.of(type),
-                account = tx.string("Account") ?: "",
-                destination = tx.string("Destination"),
-                amount = amount,
-                feeDrops = tx.long("Fee") ?: 0L,
-                result = meta?.string("TransactionResult") ?: root.string("engine_result") ?: "",
-                ledgerIndex = root.long("ledger_index") ?: 0L,
-            ),
+        return StreamTx(
+            hash = root.string("hash") ?: tx.string("hash") ?: "",
+            type = type,
+            category = TxCategory.of(type),
+            account = tx.string("Account") ?: "",
+            destination = tx.string("Destination"),
+            amount = amount,
+            feeDrops = tx.long("Fee") ?: 0L,
+            result = meta?.string("TransactionResult") ?: root.string("engine_result") ?: "",
+            ledgerIndex = root.long("ledger_index") ?: tx.long("ledger_index") ?: 0L,
+            closeTime = tx.long("date") ?: root.long("date"),
         )
     }
 
@@ -101,10 +104,10 @@ object StreamParser {
         return if (text.isNotEmpty() && text.all { it in ' '..'~' }) text.trim() else code.take(8) + "…"
     }
 
-    private fun JsonObject.string(key: String): String? =
+    internal fun JsonObject.string(key: String): String? =
         (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
 
-    private fun JsonObject.long(key: String): Long? {
+    internal fun JsonObject.long(key: String): Long? {
         val primitive = this[key] as? JsonPrimitive ?: return null
         return primitive.longOrNull ?: primitive.content.toLongOrNull()
     }

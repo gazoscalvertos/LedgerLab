@@ -40,6 +40,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ledgerlab.app.ui.components.CategoryDonut
+import com.ledgerlab.app.ui.components.LabFeature
 import com.ledgerlab.app.ui.components.LabsGrid
 import com.ledgerlab.app.ui.components.LedgerPulse
 import com.ledgerlab.app.ui.components.NetworkSwitcher
@@ -65,6 +66,7 @@ fun DashboardScreen(
     snapshot: DashboardSnapshot,
     transactions: Flow<StreamTx>,
     onSelectNetwork: (XrplNetwork) -> Unit,
+    onOpenFeature: (LabFeature) -> Unit,
 ) {
     val accent = networkColor(network)
     val insets = WindowInsets.systemBars.asPaddingValues()
@@ -153,9 +155,9 @@ fun DashboardScreen(
             Column {
                 Text("THE LAB", style = MaterialTheme.typography.labelSmall, color = accent)
                 Spacer(Modifier.height(4.dp))
-                Text("Hands-on XRPL demos, coming next", style = MaterialTheme.typography.titleMedium, color = LabColors.TextPrimary)
+                Text("Hands-on XRPL demos", style = MaterialTheme.typography.titleMedium, color = LabColors.TextPrimary)
                 Spacer(Modifier.height(12.dp))
-                LabsGrid(Modifier.fillMaxWidth())
+                LabsGrid(onOpenFeature, Modifier.fillMaxWidth())
             }
         }
     }

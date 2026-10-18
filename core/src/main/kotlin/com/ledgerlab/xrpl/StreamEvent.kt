@@ -43,6 +43,8 @@ data class StreamTx(
     val feeDrops: Long,
     val result: String,
     val ledgerIndex: Long,
+    /** Ledger close time in seconds since the Ripple epoch, when known (not sent on the live stream). */
+    val closeTime: Long? = null,
 ) {
     val succeeded: Boolean get() = result == "tesSUCCESS"
     val xrpDrops: Long get() = (amount as? Amount.Xrp)?.drops ?: 0L

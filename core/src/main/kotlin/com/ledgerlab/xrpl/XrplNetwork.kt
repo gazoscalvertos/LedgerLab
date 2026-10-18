@@ -4,24 +4,28 @@ package com.ledgerlab.xrpl
 enum class XrplNetwork(
     val label: String,
     val wsUrl: String,
+    val rpcUrl: String,
     val faucetUrl: String?,
     val explorerUrl: String,
 ) {
     TESTNET(
         label = "Testnet",
         wsUrl = "wss://s.altnet.rippletest.net:51233",
+        rpcUrl = "https://s.altnet.rippletest.net:51234",
         faucetUrl = "https://faucet.altnet.rippletest.net/accounts",
         explorerUrl = "https://testnet.xrpl.org",
     ),
     DEVNET(
         label = "Devnet",
         wsUrl = "wss://s.devnet.rippletest.net:51233",
+        rpcUrl = "https://s.devnet.rippletest.net:51234",
         faucetUrl = "https://faucet.devnet.rippletest.net/accounts",
         explorerUrl = "https://devnet.xrpl.org",
     ),
     MAINNET(
         label = "Mainnet",
         wsUrl = "wss://s1.ripple.com",
+        rpcUrl = "https://s1.ripple.com:51234",
         faucetUrl = null,
         explorerUrl = "https://livenet.xrpl.org",
     );

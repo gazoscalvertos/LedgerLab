@@ -2,6 +2,7 @@ package com.ledgerlab.app.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,8 +32,14 @@ import androidx.compose.ui.unit.dp
 import com.ledgerlab.app.ui.theme.LabColors
 
 /** The demos planned for LedgerLab. Each becomes tappable once its screen exists. */
-enum class LabFeature(val title: String, val blurb: String, val icon: ImageVector, val color: Color) {
-    WALLET("Wallet", "Create or import a wallet and fund it from the faucet", Icons.Outlined.AccountBalanceWallet, LabColors.Matrix),
+enum class LabFeature(
+    val title: String,
+    val blurb: String,
+    val icon: ImageVector,
+    val color: Color,
+    val available: Boolean = false,
+) {
+    WALLET("Wallet", "Create or import a wallet and fund it from the faucet", Icons.Outlined.AccountBalanceWallet, LabColors.Matrix, available = true),
     TOKENS("Tokens", "Issue tokens and set up trust lines", Icons.Outlined.Token, LabColors.Gold),
     DEX("DEX", "Place offers on the built-in order book", Icons.Outlined.CandlestickChart, LabColors.Cyan),
     NFTS("NFTs", "Mint, list and trade native NFTs", Icons.Outlined.Image, LabColors.Magenta),
@@ -42,11 +49,15 @@ enum class LabFeature(val title: String, val blurb: String, val icon: ImageVecto
 }
 
 @Composable
-fun LabsGrid(modifier: Modifier = Modifier, features: List<LabFeature> = LabFeature.entries) {
+fun LabsGrid(
+    onOpen: (LabFeature) -> Unit,
+    modifier: Modifier = Modifier,
+    features: List<LabFeature> = LabFeature.entries,
+) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         features.chunked(2).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                row.forEach { LabCard(it, Modifier.weight(1f)) }
+                row.forEach { LabCard(it, onOpen, Modifier.weight(1f)) }
                 if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
@@ -54,13 +65,14 @@ fun LabsGrid(modifier: Modifier = Modifier, features: List<LabFeature> = LabFeat
 }
 
 @Composable
-private fun LabCard(feature: LabFeature, modifier: Modifier = Modifier) {
+private fun LabCard(feature: LabFeature, onOpen: (LabFeature) -> Unit, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(16.dp)
     Column(
         modifier
             .clip(shape)
             .background(LabColors.Surface)
-            .border(1.dp, LabColors.Outline, shape)
+            .border(1.dp, if (feature.available) feature.color.copy(alpha = 0.5f) else LabColors.Outline, shape)
+            .clickable(enabled = feature.available) { onOpen(feature) }
             .padding(14.dp),
     ) {
         Icon(feature.icon, contentDescription = null, tint = feature.color, modifier = Modifier.size(22.dp))
@@ -70,7 +82,7 @@ private fun LabCard(feature: LabFeature, modifier: Modifier = Modifier) {
         Text(feature.blurb, style = MaterialTheme.typography.bodySmall, color = LabColors.TextSecondary, minLines = 2, maxLines = 2)
         Spacer(Modifier.height(10.dp))
         Text(
-            "SOON",
+            if (feature.available) "OPEN" else "SOON",
             style = MaterialTheme.typography.labelSmall,
             color = feature.color,
             modifier = Modifier

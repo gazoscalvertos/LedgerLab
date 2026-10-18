@@ -17,5 +17,7 @@ kotlin {
 
 dependencies {
     api(libs.kotlinx.serialization.json)
+    api(libs.xrpl4j.core)
+    api(libs.okhttp)
     testImplementation(libs.junit)
 }
