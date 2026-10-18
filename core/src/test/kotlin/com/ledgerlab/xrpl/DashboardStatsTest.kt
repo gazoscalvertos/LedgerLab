@@ -57,4 +57,32 @@ class DashboardStatsTest {
         stats.reset()
         assertEquals(DashboardSnapshot(), stats.snapshot())
     }
+
+    private fun closed(index: Long, closeSec: Long, atMs: Long, txns: Int = 20) = StreamEvent.LedgerClosed(
+        LedgerClose(index, closeTime = closeSec, txnCount = txns, feeBaseDrops = 10,
+            reserveBaseDrops = 1_000_000, reserveIncDrops = 200_000, receivedAtMs = atMs),
+    )
+
+    @Test
+    fun backlogAfterBackgroundDoesNotSkewCloseTime() {
+        val stats = DashboardStats()
+        (1L..4L).forEach { stats.onEvent(closed(it, it * 4, it * 4_000)) }
+        // The app sat in the background for five minutes; Android then delivers the backlog all at once.
+        val resumedAt = 316_000L
+        (5L..30L).forEach { stats.onEvent(closed(it, it * 4, resumedAt + (it - 5) * 3)) }
+        val snap = stats.snapshot()
+        assertEquals(4.0, snap.avgCloseSeconds, 0.001)
+        assertEquals(5.0, snap.tps, 0.001)
+    }
+
+    @Test
+    fun missedLedgersRestartTheWindow() {
+        val stats = DashboardStats()
+        stats.onEvent(closed(1, 4, 4_000))
+        stats.onEvent(closed(2, 8, 8_000))
+        // Reconnected after missing 50 ledgers.
+        stats.onEvent(closed(53, 212, 212_000))
+        stats.onEvent(closed(54, 215, 215_500))
+        assertEquals(3.5, stats.snapshot().avgCloseSeconds, 0.001)
+    }
 }
