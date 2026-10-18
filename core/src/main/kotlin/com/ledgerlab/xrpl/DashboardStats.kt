@@ -33,6 +33,7 @@ class DashboardStats(
     private val ledgers = ArrayDeque<LedgerClose>()
     private val buckets = LinkedHashMap<Long, Bucket>()
     private val whales = mutableListOf<StreamTx>()
+    private val tpsHistory = ArrayDeque<Double>()
     private var snapshot = DashboardSnapshot()
     private var txSeen = 0L
     private var ledgersSeen = 0L
@@ -47,6 +48,7 @@ class DashboardStats(
 
     fun reset() {
         ledgers.clear()
+        tpsHistory.clear()
         buckets.clear()
         whales.clear()
         txSeen = 0
@@ -92,20 +94,30 @@ class DashboardStats(
     }
 
     private fun onLedger(ledger: LedgerClose) {
-        if (ledgers.lastOrNull()?.index?.let { it >= ledger.index } == true) return
+        val last = ledgers.lastOrNull()
+        if (last != null && last.index >= ledger.index) return
+        // A gap means timing across it is meaningless: ledgers were missed (a reconnect), or this one
+        // arrived long after it closed (the app was in the background and Android froze the socket).
+        // Start the timing window again from here rather than averaging the time away into the stats.
+        if (last != null && (ledger.index != last.index + 1 || arrivedLate(last, ledger))) ledgers.clear()
+        val prev = ledgers.lastOrNull()
         ledgers.addLast(ledger)
-        while (ledgers.size > historySize + 1) ledgers.removeFirst()
+        while (ledgers.size > WINDOW + 1) ledgers.removeFirst()
         ledgersSeen++
 
-        val history = ledgers.zipWithNext { prev, cur ->
-            val seconds = intervalSeconds(prev, cur)
-            if (seconds > 0) cur.txnCount / seconds else 0.0
+        if (prev != null) {
+            val seconds = intervalSeconds(prev, ledger)
+            if (seconds > 0) {
+                tpsHistory.addLast(ledger.txnCount / seconds)
+                while (tpsHistory.size > historySize) tpsHistory.removeFirst()
+            }
         }
-        val recent = ledgers.toList().takeLast(11)
-        val span = if (recent.size >= 2) intervalSeconds(recent.first(), recent.last()) else 0.0
-        val avgClose = if (recent.size >= 2) span / (recent.size - 1) else snapshot.avgCloseSeconds
-        val tps = if (span > 0) recent.drop(1).sumOf { it.txnCount } / span else 0.0
-        if (recent.size >= 3) peakTps = maxOf(peakTps, tps)
+        val recent = ledgers.toList()
+        val span = recent.zipWithNext(::intervalSeconds).sum()
+        val warm = recent.size >= 2 && span > 0
+        val avgClose = if (warm) span / (recent.size - 1) else snapshot.avgCloseSeconds
+        val tps = if (warm) recent.drop(1).sumOf { it.txnCount } / span else snapshot.tps
+        if (recent.size >= 3 && warm) peakTps = maxOf(peakTps, tps)
 
         snapshot = snapshot.copy(
             ledgerIndex = ledger.index,
@@ -116,7 +128,7 @@ class DashboardStats(
             feeBaseDrops = ledger.feeBaseDrops,
             reserveBaseDrops = ledger.reserveBaseDrops,
             reserveIncDrops = ledger.reserveIncDrops,
-            tpsHistory = history,
+            tpsHistory = tpsHistory.toList(),
         )
     }
 
@@ -139,13 +151,28 @@ class DashboardStats(
     }
 
     /**
-     * Prefer the gap between arrivals (millisecond precision); fall back to ledger close times,
-     * which only have one-second resolution, if arrivals were bunched up (e.g. after a reconnect).
+     * Prefer the gap between arrivals (millisecond precision). Fall back to the ledger close times when
+     * arrivals were bunched up, e.g. a backlog delivered at once after the app comes back to the front.
+     * Close times are rounded by the network (up to 10 s), so they only serve as the fallback.
      */
     private fun intervalSeconds(a: LedgerClose, b: LedgerClose): Double {
-        val ledgersApart = (b.index - a.index).coerceAtLeast(1)
         val arrival = (b.receivedAtMs - a.receivedAtMs) / 1000.0
-        if (arrival >= 1.0 * ledgersApart) return arrival
+        if (arrival >= 1.0) return arrival
         return (b.closeTime - a.closeTime).toDouble().coerceAtLeast(0.0)
+    }
+
+    /** True when [b] reached us far later than the network closed it, relative to [a]. */
+    private fun arrivedLate(a: LedgerClose, b: LedgerClose): Boolean {
+        val arrival = (b.receivedAtMs - a.receivedAtMs) / 1000.0
+        val closed = (b.closeTime - a.closeTime).toDouble()
+        return arrival > closed + LATE_TOLERANCE_SECONDS
+    }
+
+    private companion object {
+        /** Ledgers in the rolling average for close time and throughput. */
+        const val WINDOW = 10
+
+        /** Close times are rounded to as much as 10 s, plus network jitter. */
+        const val LATE_TOLERANCE_SECONDS = 15.0
     }
 }
