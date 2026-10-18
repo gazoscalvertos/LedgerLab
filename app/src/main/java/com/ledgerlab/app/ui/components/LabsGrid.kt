@@ -16,12 +16,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CandlestickChart
+import androidx.compose.material.icons.outlined.ConfirmationNumber
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.Token
+import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material.icons.outlined.WaterDrop
+import androidx.compose.material.icons.outlined.Work
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -33,13 +37,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.ledgerlab.app.ui.theme.LabColors
 
-/** The demos planned for LedgerLab. Each becomes tappable once its screen exists. */
+/** LedgerLab's screens. [mockup] ones are small apps built from several features, shown in their own section. */
 enum class LabFeature(
     val title: String,
     val blurb: String,
     val icon: ImageVector,
     val color: Color,
     val available: Boolean = true,
+    val mockup: Boolean = false,
 ) {
     WALLET("Wallet", "Create or import a wallet and fund it from the faucet", Icons.Outlined.AccountBalanceWallet, LabColors.Matrix),
     TOKENS("Tokens", "Issue, hold and send your own tokens", Icons.Outlined.Token, LabColors.Gold),
@@ -47,16 +52,20 @@ enum class LabFeature(
     NFTS("NFTs", "Mint to IPFS, then list and trade", Icons.Outlined.Image, LabColors.Magenta),
     ESCROW("Escrow", "Lock XRP or tokens until a time", Icons.Outlined.Lock, LabColors.Orange),
     CHANNELS("Channels", "Stream XRP micropayments off ledger", Icons.Outlined.Bolt, LabColors.Matrix),
-    NAMES(".xrp names", "Register names, sell subdomains, pay by name", Icons.Outlined.Language, LabColors.Cyan),
     AMM("AMM", "Provide liquidity to automated market makers", Icons.Outlined.WaterDrop, LabColors.Violet),
     EXPLORER("Explorer", "Look up any account or transaction", Icons.Outlined.Search, LabColors.TextPrimary),
+    NAMES(".xrp names", "Register names, sell subdomains, pay by name", Icons.Outlined.Language, LabColors.Cyan, mockup = true),
+    NOTARY("Notary", "Timestamp a file's fingerprint, verify it later", Icons.Outlined.Verified, LabColors.Gold, mockup = true),
+    TICKETS("Event tickets", "NFT tickets with royalties and door check-in", Icons.Outlined.ConfirmationNumber, LabColors.Magenta, mockup = true),
+    METER("Pay-per-minute", "Stream XRP by the second, settle once", Icons.Outlined.Timer, LabColors.Cyan, mockup = true),
+    JOBS("Freelance jobs", "Escrowed pay, released when work is accepted", Icons.Outlined.Work, LabColors.Orange, mockup = true),
 }
 
 @Composable
 fun LabsGrid(
     onOpen: (LabFeature) -> Unit,
     modifier: Modifier = Modifier,
-    features: List<LabFeature> = LabFeature.entries,
+    features: List<LabFeature> = LabFeature.entries.filter { !it.mockup },
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         features.chunked(2).forEach { row ->

@@ -19,8 +19,12 @@ import com.ledgerlab.app.ui.labs.ChannelsLab
 import com.ledgerlab.app.ui.labs.DexLab
 import com.ledgerlab.app.ui.labs.EscrowLab
 import com.ledgerlab.app.ui.labs.ExplorerLab
+import com.ledgerlab.app.ui.labs.JobsLab
+import com.ledgerlab.app.ui.labs.MeterLab
 import com.ledgerlab.app.ui.labs.NamesLab
 import com.ledgerlab.app.ui.labs.NftLab
+import com.ledgerlab.app.ui.labs.NotaryLab
+import com.ledgerlab.app.ui.labs.TicketsLab
 import com.ledgerlab.app.ui.labs.TokensLab
 import com.ledgerlab.app.ui.theme.LedgerLabTheme
 import com.ledgerlab.app.ui.wallet.WalletScreen
@@ -49,6 +53,10 @@ class MainActivity : ComponentActivity() {
                     LabFeature.ESCROW -> EscrowLab(onBack = back)
                     LabFeature.CHANNELS -> ChannelsLab(onBack = back)
                     LabFeature.NAMES -> NamesLab(onBack = back)
+                    LabFeature.NOTARY -> NotaryLab(onBack = back)
+                    LabFeature.TICKETS -> TicketsLab(onBack = back)
+                    LabFeature.METER -> MeterLab(onBack = back)
+                    LabFeature.JOBS -> JobsLab(onBack = back)
                     LabFeature.AMM -> AmmLab(onBack = back)
                     LabFeature.EXPLORER -> ExplorerLab(onBack = back)
                     null -> {

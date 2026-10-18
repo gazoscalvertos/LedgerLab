@@ -79,6 +79,8 @@ data class EscrowEntry(
     val cancelAfter: Long?,
     /** The Sequence of the EscrowCreate, which EscrowFinish refers to. Null if it couldn't be found. */
     val createSequence: Long?,
+    /** The crypto-condition (hex) that must be fulfilled to finish it, if any. */
+    val condition: String? = null,
 )
 
 data class AmmPool(
@@ -226,6 +228,7 @@ class LabQueries(private val rpc: XrplRpc) {
                 finishAfter = o.long("FinishAfter"),
                 cancelAfter = o.long("CancelAfter"),
                 createSequence = o.string("PreviousTxnID")?.let(::sequenceOf),
+                condition = o.string("Condition"),
             )
         }
     }
