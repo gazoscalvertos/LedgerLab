@@ -29,6 +29,9 @@ ledger in real time, and grows into a set of hands-on demos of what the XRPL can
   - **Escrow**: lock XRP or tokens (XLS-85 token escrow) until a time, watch the countdown, then release it or return it after expiry
   - **Channels**: open an XRP payment channel, stream off-ledger claims signed on the phone, check them with
     `channel_verify`, and redeem or close as the payee
+  - **.xrp names** (mockup app): a wallet plays the registry. Register `alice.xrp` for 10 XRP (pay, mint, hand over:
+    four transactions in one tap), issue and sell subdomains like `pay.alice.xrp`, trade names with a 5% registry royalty,
+    and pay anyone by name. Names are NFTs, resolved through Clio's `nfts_by_issuer` index
   - **AMM**: inspect an XRP/token pool (reserves, price, LP tokens, fee), create one or add liquidity
   - **Explorer**: look up any account, transaction or ledger, with raw JSON and links between them
 
@@ -38,7 +41,8 @@ ledger in real time, and grows into a set of hands-on demos of what the XRPL can
 2. In **Tokens**, pick one as holder and the other as issuer, then run the three steps.
 3. Send the token to a third wallet, trade it in **DEX**, seed an **AMM** pool, lock it in **Escrow**, or price an **NFT** in it.
 4. In **Channels**, open a channel between two wallets, tap **Pay** a few times as the payer, then switch to the payee and redeem.
-5. Paste any hash from the activity lists into **Explorer**.
+5. In **.xrp names**, make one wallet the registry, register a name from another, issue a subdomain and sell it to a third, then pay it by name.
+6. Paste any hash from the activity lists into **Explorer**.
 
 ## Getting the APK
 

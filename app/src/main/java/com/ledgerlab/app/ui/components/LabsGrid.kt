@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CandlestickChart
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Token
@@ -46,6 +47,7 @@ enum class LabFeature(
     NFTS("NFTs", "Mint to IPFS, then list and trade", Icons.Outlined.Image, LabColors.Magenta),
     ESCROW("Escrow", "Lock XRP or tokens until a time", Icons.Outlined.Lock, LabColors.Orange),
     CHANNELS("Channels", "Stream XRP micropayments off ledger", Icons.Outlined.Bolt, LabColors.Matrix),
+    NAMES(".xrp names", "Register names, sell subdomains, pay by name", Icons.Outlined.Language, LabColors.Cyan),
     AMM("AMM", "Provide liquidity to automated market makers", Icons.Outlined.WaterDrop, LabColors.Violet),
     EXPLORER("Explorer", "Look up any account or transaction", Icons.Outlined.Search, LabColors.TextPrimary),
 }
