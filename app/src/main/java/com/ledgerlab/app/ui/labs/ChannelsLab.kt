@@ -237,8 +237,8 @@ private fun ChannelCard(
         if (claim != null && claim.drops > channel.balanceDrops) {
             KeyValue("Owed off ledger", Format.xrp(claim.drops - channel.balanceDrops), LabColors.Gold)
         }
-        if (channel.expiration != null) {
-            KeyValue("Closing after", "${formatRipple(channel.expiration)} (settle delay)", LabColors.Orange)
+        channel.expiration?.let { closeAt ->
+            KeyValue("Closing after", "${formatRipple(closeAt)} (settle delay)", LabColors.Orange)
         }
         Spacer(Modifier.height(8.dp))
         if (payer) {
