@@ -31,7 +31,7 @@ ledger in real time, and grows into a set of hands-on demos of what the XRPL can
     `channel_verify`, and redeem or close as the payee
   - **AMM**: inspect an XRP/token pool (reserves, price, LP tokens, fee), create one or add liquidity
   - **Explorer**: look up any account, transaction or ledger, with raw JSON and links between them
-- **Mockup apps**, small real-world ideas built from those features:
+- **Use cases**, small real-world apps built from those features (both home-screen sections fold away):
   - **.xrp names**: a wallet plays the registry. Register `alice.xrp` for 10 XRP (pay, mint, hand over:
     four transactions in one tap), issue and sell subdomains like `pay.alice.xrp`, trade names with a 5% registry royalty,
     and pay anyone by name. Names are NFTs, resolved through Clio's `nfts_by_issuer` index
@@ -44,6 +44,16 @@ ledger in real time, and grows into a set of hands-on demos of what the XRPL can
     rate. The provider settles the whole session with one PaymentChannelClaim
   - **Freelance jobs**: the client locks the budget in an escrow with a PREIMAGE-SHA-256 crypto-condition and a deadline.
     Approving hands the freelancer the fulfillment to claim it; a guessed secret fails; after the deadline the client refunds
+  - **Crowdfunding**: all-or-nothing. Each pledge is a conditional escrow to the creator with the deadline as CancelAfter.
+    If the goal is met the creator collects every pledge; if not, one tap cancels them all back to the backers
+  - **Loyalty points**: a shop issues its own token with optional RequireAuth (approve members) and clawback. Members earn,
+    spend points back to the shop, or offer them for XRP on the DEX
+  - **Subscriptions**: the customer writes a Check per billing period with a plan InvoiceID; the merchant cashes it, and
+    the customer can cancel any time before
+  - **Shared treasury**: SignerListSet makes a club wallet need 2 of 3 signers. A payment is drafted once, each signer
+    signs it on the phone, and the combined multi-signed transaction is submitted
+  - **Verified badges**: XLS-70 credentials. An issuer vouches (KYC, Over18…), the subject accepts, anyone verifies from
+    the ledger, and the issuer can revoke
 
 ## Try it on Testnet
 
@@ -56,7 +66,12 @@ ledger in real time, and grows into a set of hands-on demos of what the XRPL can
 7. In **Event tickets**, mint three tickets as the organiser, buy one as a fan, resell it to a third wallet, then check it in at the Door.
 8. In **Pay-per-minute**, open a channel, run the meter for a minute, verify the claim and settle.
 9. In **Freelance jobs**, post a job as the client, try claiming as the freelancer, approve, then claim for real.
-10. Paste any hash from the activity lists into **Explorer**.
+10. In **Crowdfunding**, launch a short campaign, pledge from two wallets, and either collect or let it expire and refund.
+11. In **Loyalty points**, set up a fresh shop wallet, join as a customer, approve, award, spend and claw back.
+12. In **Subscriptions**, pay for a plan as the customer, then collect it as the merchant.
+13. In **Shared treasury**, set 2 of 3 signers, draft a payment, approve it as two signers and send it.
+14. In **Verified badges**, issue a KYC badge, accept it as the subject, then verify it from the Verify tab.
+15. Paste any hash from the activity lists into **Explorer**.
 
 ## Getting the APK
 

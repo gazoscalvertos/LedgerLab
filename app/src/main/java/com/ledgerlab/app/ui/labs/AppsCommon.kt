@@ -31,3 +31,7 @@ fun preciseXrp(drops: Long): String =
 /** The saved wallet's name for an address, or the short address. */
 fun nameOf(address: String?, wallets: List<StoredWallet>): String =
     address?.let { a -> wallets.firstOrNull { it.address == a }?.label ?: shortAddr(a) } ?: "unknown"
+
+/** A field of a stored JSON record as text. */
+internal fun kotlinx.serialization.json.JsonObject.text(key: String): String? =
+    (this[key] as? kotlinx.serialization.json.JsonPrimitive)?.content

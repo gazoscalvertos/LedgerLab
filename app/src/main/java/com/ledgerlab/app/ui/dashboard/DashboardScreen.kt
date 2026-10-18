@@ -1,11 +1,14 @@
 package com.ledgerlab.app.ui.dashboard
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,14 +27,22 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -152,22 +163,59 @@ fun DashboardScreen(
         }
 
         item {
-            Column {
-                Text("THE LAB", style = MaterialTheme.typography.labelSmall, color = accent)
-                Spacer(Modifier.height(4.dp))
-                Text("Hands-on XRPL demos", style = MaterialTheme.typography.titleMedium, color = LabColors.TextPrimary)
-                Spacer(Modifier.height(12.dp))
-                LabsGrid(onOpenFeature, Modifier.fillMaxWidth())
-            }
+            LabSection(
+                eyebrow = "THE BASICS",
+                title = "Core XRPL features, hands on",
+                features = LabFeature.entries.filter { !it.mockup },
+                accent = accent,
+                onOpenFeature = onOpenFeature,
+            )
         }
 
         item {
-            Column {
-                Text("MOCKUP APPS", style = MaterialTheme.typography.labelSmall, color = accent)
+            LabSection(
+                eyebrow = "USE CASES",
+                title = "Real-world apps built on the ledger",
+                features = LabFeature.entries.filter { it.mockup },
+                accent = accent,
+                onOpenFeature = onOpenFeature,
+            )
+        }
+    }
+}
+
+/** A titled group of lab cards that folds away when its header is tapped. Open by default. */
+@Composable
+private fun LabSection(
+    eyebrow: String,
+    title: String,
+    features: List<LabFeature>,
+    accent: androidx.compose.ui.graphics.Color,
+    onOpenFeature: (LabFeature) -> Unit,
+) {
+    var open by rememberSaveable(eyebrow) { mutableStateOf(true) }
+    val turn by animateFloatAsState(if (open) 0f else -90f, label = "chevron")
+    Column {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { open = !open }.padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("$eyebrow · ${features.size}", style = MaterialTheme.typography.labelSmall, color = accent)
                 Spacer(Modifier.height(4.dp))
-                Text("Real-world ideas built on those features", style = MaterialTheme.typography.titleMedium, color = LabColors.TextPrimary)
+                Text(title, style = MaterialTheme.typography.titleMedium, color = LabColors.TextPrimary)
+            }
+            Icon(
+                Icons.Outlined.ExpandMore,
+                contentDescription = if (open) "Collapse" else "Expand",
+                tint = LabColors.TextSecondary,
+                modifier = Modifier.rotate(turn),
+            )
+        }
+        AnimatedVisibility(open) {
+            Column {
                 Spacer(Modifier.height(12.dp))
-                LabsGrid(onOpenFeature, Modifier.fillMaxWidth(), features = LabFeature.entries.filter { it.mockup })
+                LabsGrid(onOpenFeature, Modifier.fillMaxWidth(), features = features)
             }
         }
     }
