@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A stylised "X" built from two streaking transaction lanes. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#00FF9C"
+        android:pathData="M34,34 L46,34 L74,74 L62,74 Z" />
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M62,34 L74,34 L46,74 L34,74 Z" />
+    <path
+        android:fillColor="#5500FF9C"
+        android:pathData="M28,80 L80,80 L80,83 L28,83 Z" />
+    <path
+        android:fillColor="#FFC940"
+        android:pathData="M72,79 L82,79 L82,84 L72,84 Z" />
+</vector>
