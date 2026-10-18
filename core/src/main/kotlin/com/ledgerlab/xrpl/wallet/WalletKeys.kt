@@ -7,8 +7,11 @@ import org.xrpl.xrpl4j.crypto.keys.Base58EncodedSecret
 import org.xrpl.xrpl4j.crypto.keys.PublicKey
 import org.xrpl.xrpl4j.crypto.keys.Seed
 import org.xrpl.xrpl4j.crypto.signing.bc.BcSignatureService
+import org.xrpl.xrpl4j.model.client.channels.UnsignedClaim
 import org.xrpl.xrpl4j.model.transactions.Address
+import org.xrpl.xrpl4j.model.transactions.Hash256
 import org.xrpl.xrpl4j.model.transactions.Transaction
+import org.xrpl.xrpl4j.model.transactions.XrpCurrencyAmount
 
 enum class KeyAlgorithm(val label: String) {
     ED25519("Ed25519"),
@@ -69,5 +72,18 @@ object WalletKeys {
         val tx = build(keyPair.publicKey().deriveAddress(), keyPair.publicKey())
         val signed = signer.sign(keyPair.privateKey(), tx)
         return SignedTx(signed.signedTransactionBytes().hexValue(), signed.hash().value())
+    }
+
+    /**
+     * Signs a payment channel claim off the ledger: "the payee may take [drops] in total from [channelId]".
+     * Returns the hex signature. Nothing is submitted, so this is free and instant.
+     */
+    fun signClaim(secret: String, channelId: String, drops: Long): String {
+        val keyPair = Seed.fromBase58EncodedSecret(Base58EncodedSecret.of(secret.trim())).deriveKeyPair()
+        val claim = UnsignedClaim.builder()
+            .channel(Hash256.of(channelId))
+            .amount(XrpCurrencyAmount.ofDrops(drops))
+            .build()
+        return signer.sign(keyPair.privateKey(), claim).base16Value()
     }
 }

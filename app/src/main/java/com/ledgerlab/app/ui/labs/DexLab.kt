@@ -54,6 +54,8 @@ data class DexState(
 )
 
 class DexViewModel(app: Application) : LabViewModel(app) {
+    override val usesTokens get() = true
+
     private val _state = MutableStateFlow(DexState())
     val state: StateFlow<DexState> = _state.asStateFlow()
 
@@ -107,6 +109,7 @@ fun DexLab(onBack: () -> Unit, vm: DexViewModel = viewModel()) {
     val wallets by vm.wallets.collectAsStateWithLifecycle()
     val wallet by vm.selected.collectAsStateWithLifecycle()
     val state by vm.state.collectAsStateWithLifecycle()
+    val tokens by vm.tokens.collectAsStateWithLifecycle()
     val tx by vm.tx.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
     val accent = LabColors.Cyan
@@ -127,7 +130,7 @@ fun DexLab(onBack: () -> Unit, vm: DexViewModel = viewModel()) {
                 Panel(accent = accent, title = "Trading as") {
                     WalletChips(wallets, wallet, accent, { vm.selectWallet(it.id) })
                     Spacer(Modifier.height(12.dp))
-                    TokenPicker(code, issuer, state.lines, accent) { c, i -> code = c; issuer = i }
+                    TokenPicker(code, issuer, tokens, accent) { c, i -> code = c; issuer = i }
                 }
             }
             item { OrderBook(state, pair) }
