@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,12 +28,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ledgerlab.app.data.StoredWallet
+import com.ledgerlab.app.ui.components.Actor
 import com.ledgerlab.app.ui.components.HowItWorks
 import com.ledgerlab.app.ui.components.LabButton
 import com.ledgerlab.app.ui.components.LabOutlineButton
 import com.ledgerlab.app.ui.components.LabScaffold
 import com.ledgerlab.app.ui.components.LabTextField
 import com.ledgerlab.app.ui.components.Panel
+import com.ledgerlab.app.ui.components.UseCaseHero
 import com.ledgerlab.app.ui.theme.LabColors
 import com.ledgerlab.app.ui.theme.Mono
 import com.ledgerlab.xrpl.Format
@@ -161,7 +167,17 @@ fun TreasuryLab(onBack: () -> Unit, vm: TreasuryViewModel = viewModel()) {
     val error by vm.error.collectAsStateWithLifecycle()
     val accent = LabColors.Gold
 
-    LabScaffold("Shared treasury", "A club wallet that needs 2 of 3 to spend", accent, network, vm::selectNetwork, onBack) {
+    LabScaffold("Shared treasury", "A club wallet that needs 2 of 3 to spend", accent, network, vm::selectNetwork, onBack, features = listOf("Multi-signing", "SignerListSet")) {
+        item {
+            UseCaseHero(
+                brand = "ClubVault",
+                tagline = "A shared wallet that needs a quorum to spend",
+                icon = Icons.Outlined.AccountBalance,
+                accent = accent,
+                actors = listOf(Actor("Signers", Icons.Outlined.Groups), Actor("Treasury", Icons.Outlined.AccountBalance), Actor("Payee", Icons.Outlined.Person)),
+                links = listOf("2 of 3 sign", "one payment"),
+            )
+        }
         if (wallets.size < 3) {
             item { NeedsWallet(accent, "A treasury and at least two signers: create and fund three wallets (four for 2 of 3) in the Wallet lab.") }
         } else {

@@ -499,6 +499,20 @@ object LabTransactions {
             .apply { if (issuer != null) issuer(Address.of(issuer)) }
             .build()
 
+    /** Publishes or removes a name record: [memoJson] from [NameRecords], in a memo on a no-op AccountSet. */
+    fun nameRecord(from: Address, key: PublicKey, fill: Autofill, memoJson: String): AccountSet = AccountSet.builder()
+        .account(from).signingPublicKey(key).fee(fee(fill)).sequence(seq(fill)).lastLedgerSequence(last(fill))
+        .addMemos(
+            MemoWrapper.builder().memo(
+                Memo.builder()
+                    .memoType(hex(NameRecords.MEMO_TYPE))
+                    .memoData(hex(memoJson))
+                    .memoFormat(hex("application/json"))
+                    .build(),
+            ).build(),
+        )
+        .build()
+
     internal fun unhex(hex: String): ByteArray = hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
 
     internal fun hex(text: String): String = text.toByteArray(Charsets.UTF_8).joinToString("") { "%02X".format(it) }

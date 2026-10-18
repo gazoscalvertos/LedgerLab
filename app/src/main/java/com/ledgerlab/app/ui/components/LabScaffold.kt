@@ -36,6 +36,8 @@ fun LabScaffold(
     network: XrplNetwork,
     onSelectNetwork: (XrplNetwork) -> Unit,
     onBack: () -> Unit,
+    /** The XRPL features a use case is built from, shown as a sub heading. */
+    features: List<String> = emptyList(),
     content: LazyListScope.() -> Unit,
 ) {
     val insets = WindowInsets.systemBars.asPaddingValues()
@@ -58,6 +60,13 @@ fun LabScaffold(
                     Column(Modifier.weight(1f)) {
                         Text(title, style = MaterialTheme.typography.titleLarge, color = LabColors.TextPrimary)
                         Text(subtitle, style = MaterialTheme.typography.bodySmall, color = accent)
+                        if (features.isNotEmpty()) {
+                            Text(
+                                "XRPL · " + features.joinToString(" · "),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = LabColors.TextMuted,
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.height(8.dp))

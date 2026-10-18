@@ -31,10 +31,13 @@ ledger in real time, and grows into a set of hands-on demos of what the XRPL can
     `channel_verify`, and redeem or close as the payee
   - **AMM**: inspect an XRP/token pool (reserves, price, LP tokens, fee), create one or add liquidity
   - **Explorer**: look up any account, transaction or ledger, with raw JSON and links between them
-- **Use cases**, small real-world apps built from those features (both home-screen sections fold away):
+- **Use cases**, small real-world apps built from those features (both home-screen sections fold away). Each has its own
+  app-style header, a diagram of who does what, and a line naming the XRPL features it uses:
   - **.xrp names**: a wallet plays the registry. Register `alice.xrp` for 10 XRP (pay, mint, hand over:
     four transactions in one tap), issue and sell subdomains like `pay.alice.xrp`, trade names with a 5% registry royalty,
-    and pay anyone by name. Names are NFTs, resolved through Clio's `nfts_by_issuer` index
+    and pay anyone by name. Names are NFTs, resolved through Clio's `nfts_by_issuer` index. Owners publish DNS-style
+    records (A, AAAA, CNAME, TXT, including hosts like `www.alice.xrp`) with one signed memo each, and a public resolver
+    does forward lookups plus reverse lookups by IP or XRPL address
   - **Notary**: hash any file (or text) on the phone and write its SHA-256 into a memo on a no-op AccountSet. Verify later by
     hashing again and finding the match in the signer's history, with the ledger's close time as the timestamp
   - **Event tickets**: an organiser mints numbered ticket NFTs and lists them at face value. Open resale tickets carry a
@@ -46,8 +49,8 @@ ledger in real time, and grows into a set of hands-on demos of what the XRPL can
     Approving hands the freelancer the fulfillment to claim it; a guessed secret fails; after the deadline the client refunds
   - **Crowdfunding**: all-or-nothing. Each pledge is a conditional escrow to the creator with the deadline as CancelAfter.
     If the goal is met the creator collects every pledge; if not, one tap cancels them all back to the backers
-  - **Loyalty points**: a shop issues its own token with optional RequireAuth (approve members) and clawback. Members earn,
-    spend points back to the shop, or offer them for XRP on the DEX
+  - **Loyalty points**: a shop issues its own token with optional RequireAuth (approve members) and clawback, guided step by
+    step. Members get a loyalty card, spend points back to the shop, and buy or sell points against each other's DEX offers
   - **Subscriptions**: the customer writes a Check per billing period with a plan InvoiceID; the merchant cashes it, and
     the customer can cancel any time before
   - **Shared treasury**: SignerListSet makes a club wallet need 2 of 3 signers. A payment is drafted once, each signer

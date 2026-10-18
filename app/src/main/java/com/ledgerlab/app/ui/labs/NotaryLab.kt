@@ -1,6 +1,8 @@
 package com.ledgerlab.app.ui.labs
 
 import android.app.Application
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,6 +11,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Verified
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -17,19 +28,24 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.ledgerlab.app.ui.components.Actor
 import com.ledgerlab.app.ui.components.HowItWorks
 import com.ledgerlab.app.ui.components.LabButton
 import com.ledgerlab.app.ui.components.LabOutlineButton
 import com.ledgerlab.app.ui.components.LabScaffold
 import com.ledgerlab.app.ui.components.LabTextField
 import com.ledgerlab.app.ui.components.Panel
+import com.ledgerlab.app.ui.components.UseCaseHero
 import com.ledgerlab.app.ui.theme.LabColors
 import com.ledgerlab.app.ui.theme.Mono
 import com.ledgerlab.xrpl.labs.AppQueries
@@ -94,7 +110,17 @@ fun NotaryLab(onBack: () -> Unit, vm: NotaryViewModel = viewModel()) {
     val accent = LabColors.Gold
     var tab by rememberSaveable { mutableStateOf(NotaryTab.STAMP) }
 
-    LabScaffold("Notary", "Prove a file existed, without revealing it", accent, network, vm::selectNetwork, onBack) {
+    LabScaffold("Notary", "Prove a file existed, without revealing it", accent, network, vm::selectNetwork, onBack, features = listOf("Memos", "AccountSet", "account_tx")) {
+        item {
+            UseCaseHero(
+                brand = "ProofStamp",
+                tagline = "Timestamped proof a file existed",
+                icon = Icons.Outlined.Verified,
+                accent = accent,
+                actors = listOf(Actor("You", Icons.Outlined.Person), Actor("Ledger", Icons.Outlined.Dns), Actor("Anyone", Icons.Outlined.Groups)),
+                links = listOf("SHA-256 in a memo", "re-hash and match"),
+            )
+        }
         if (wallets.isEmpty()) {
             item { NeedsWallet(accent) }
         } else {
@@ -200,7 +226,19 @@ private fun RecordsPanel(records: List<NotaryRecord>, explorerUrl: String, accen
         if (records.isEmpty()) Text("Nothing yet. Notarise a file and it shows up here.", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             records.forEach { r ->
-                Column(Modifier.fillMaxWidth().clickable(enabled = r.txHash.isNotEmpty()) { uri.openUri("$explorerUrl/transactions/${r.txHash}") }.padding(vertical = 2.dp)) {
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                        .background(Brush.linearGradient(listOf(accent.copy(alpha = 0.16f), LabColors.Surface)))
+                        .border(1.dp, accent.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                        .clickable(enabled = r.txHash.isNotEmpty()) { uri.openUri("$explorerUrl/transactions/${r.txHash}") }
+                        .padding(12.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.Verified, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("CERTIFICATE OF EXISTENCE", style = MaterialTheme.typography.labelSmall, color = accent)
+                    }
+                    Spacer(Modifier.height(4.dp))
                     Text(r.label.ifBlank { "untitled" }, fontWeight = FontWeight.SemiBold, color = LabColors.TextPrimary)
                     Text(r.sha256.take(16) + "…" + r.sha256.takeLast(8), fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = accent)
                     Text(

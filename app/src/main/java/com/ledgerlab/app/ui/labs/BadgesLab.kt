@@ -1,15 +1,27 @@
 package com.ledgerlab.app.ui.labs
 
 import android.app.Application
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.HourglassEmpty
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.VerifiedUser
+import androidx.compose.material.icons.outlined.WorkspacePremium
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,6 +31,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -26,12 +40,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ledgerlab.app.data.StoredWallet
+import com.ledgerlab.app.ui.components.Actor
 import com.ledgerlab.app.ui.components.HowItWorks
 import com.ledgerlab.app.ui.components.LabButton
 import com.ledgerlab.app.ui.components.LabOutlineButton
 import com.ledgerlab.app.ui.components.LabScaffold
 import com.ledgerlab.app.ui.components.LabTextField
 import com.ledgerlab.app.ui.components.Panel
+import com.ledgerlab.app.ui.components.UseCaseHero
 import com.ledgerlab.app.ui.theme.LabColors
 import com.ledgerlab.app.ui.theme.Mono
 import com.ledgerlab.xrpl.labs.AppQueries
@@ -114,7 +130,17 @@ fun BadgesLab(onBack: () -> Unit, vm: BadgesViewModel = viewModel()) {
     val accent = LabColors.Matrix
     var tab by rememberSaveable { mutableStateOf(BadgesTab.ISSUE) }
 
-    LabScaffold("Verified badges", "On-ledger credentials: KYC, age, membership", accent, network, vm::selectNetwork, onBack) {
+    LabScaffold("Verified badges", "On-ledger credentials: KYC, age, membership", accent, network, vm::selectNetwork, onBack, features = listOf("Credentials (XLS-70)", "CredentialAccept", "CredentialDelete")) {
+        item {
+            UseCaseHero(
+                brand = "TrustBadge",
+                tagline = "Verified credentials anyone can check",
+                icon = Icons.Outlined.WorkspacePremium,
+                accent = accent,
+                actors = listOf(Actor("Issuer", Icons.Outlined.VerifiedUser), Actor("Holder", Icons.Outlined.Person), Actor("Verifier", Icons.Outlined.Search)),
+                links = listOf("issues a credential", "reads the ledger"),
+            )
+        }
         if (wallets.size < 2) {
             item { NeedsWallet(accent, "One wallet issues badges and another holds them. Create and fund two in the Wallet lab.") }
         } else {
@@ -230,6 +256,14 @@ private fun VerifyPanel(vm: BadgesViewModel, checked: Pair<String, List<LedgerCr
 private fun BadgeRow(c: LedgerCredential, wallets: List<StoredWallet>, who: String, action: @Composable () -> Unit) {
     val valid = c.valid()
     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier.size(42.dp).clip(CircleShape)
+                .background(if (valid) Brush.linearGradient(listOf(LabColors.Matrix, LabColors.Cyan)) else Brush.linearGradient(listOf(LabColors.Outline, LabColors.Surface))),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(if (valid) Icons.Outlined.VerifiedUser else Icons.Outlined.HourglassEmpty, contentDescription = null, tint = LabColors.Background)
+        }
+        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(c.type, fontFamily = Mono, fontWeight = FontWeight.Bold, color = if (valid) LabColors.Matrix else LabColors.TextMuted)
             Text(

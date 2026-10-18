@@ -1,6 +1,9 @@
 package com.ledgerlab.app.ui.labs
 
 import android.app.Application
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,6 +11,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ConfirmationNumber
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material.icons.outlined.Storefront
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -17,6 +28,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -24,12 +38,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ledgerlab.app.data.StoredWallet
+import com.ledgerlab.app.ui.components.Actor
 import com.ledgerlab.app.ui.components.HowItWorks
 import com.ledgerlab.app.ui.components.LabButton
 import com.ledgerlab.app.ui.components.LabOutlineButton
 import com.ledgerlab.app.ui.components.LabScaffold
 import com.ledgerlab.app.ui.components.LabTextField
 import com.ledgerlab.app.ui.components.Panel
+import com.ledgerlab.app.ui.components.UseCaseHero
 import com.ledgerlab.app.ui.theme.LabColors
 import com.ledgerlab.app.ui.theme.Mono
 import com.ledgerlab.xrpl.Amount
@@ -41,11 +57,11 @@ import com.ledgerlab.xrpl.labs.NftOffer
 import com.ledgerlab.xrpl.labs.Tickets
 import com.ledgerlab.xrpl.wallet.Transactions
 import com.ledgerlab.xrpl.wallet.XrplRpc
+import java.math.BigDecimal
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.xrpl.xrpl4j.model.transactions.XrpCurrencyAmount
-import java.math.BigDecimal
 
 data class Ticket(val number: Int, val nft: IssuedNft, val offer: NftOffer?) {
     val admitted: Boolean get() = nft.burned
@@ -176,7 +192,17 @@ fun TicketsLab(onBack: () -> Unit, vm: TicketsViewModel = viewModel()) {
     val accent = LabColors.Magenta
     var tab by rememberSaveable { mutableStateOf(TicketsTab.ORGANISE) }
 
-    LabScaffold("Event tickets", "NFT tickets with royalties and door check-in", accent, network, vm::selectNetwork, onBack) {
+    LabScaffold("Event tickets", "NFT tickets with royalties and door check-in", accent, network, vm::selectNetwork, onBack, features = listOf("NFTs", "NFT offers", "Transfer fees", "NFTokenBurn", "Clio")) {
+        item {
+            UseCaseHero(
+                brand = "TixChain",
+                tagline = "Scalp-proof tickets in your wallet",
+                icon = Icons.Outlined.ConfirmationNumber,
+                accent = accent,
+                actors = listOf(Actor("Organiser", Icons.Outlined.Storefront), Actor("Fan", Icons.Outlined.Person), Actor("Door", Icons.Outlined.QrCodeScanner)),
+                links = listOf("sells an NFT ticket", "burns it at entry"),
+            )
+        }
         if (wallets.size < 2) {
             item { NeedsWallet(accent, "One wallet is the organiser and another is a fan. Create and fund two (three lets you try resale) in the Wallet lab.") }
         } else {
@@ -288,21 +314,20 @@ private fun BoxOfficeTab(vm: TicketsViewModel, state: TicketsState, wallet: Stor
     val forSale = state.tickets.filter { it.offer != null }
     Panel(accent = accent, title = "${state.event}: ${forSale.size} for sale") {
         if (forSale.isEmpty()) Text("Nothing on sale. The organiser mints tickets in Organise.", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
-        forSale.forEach { t ->
-            val offer = t.offer!!
-            val mine = offer.owner == wallet?.address
-            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Ticket #${t.number}", fontWeight = FontWeight.Bold, color = accent)
-                    Text(
-                        "${Format.amount(offer.amount)} · " + (if (offer.owner == state.organiser) "box office" else "resale by ${nameOf(offer.owner, wallets)}"),
-                        fontFamily = Mono,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = LabColors.TextSecondary,
-                    )
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            forSale.forEach { t ->
+                val offer = t.offer!!
+                val mine = offer.owner == wallet?.address
+                TicketStub(
+                    state.event,
+                    t.number,
+                    Format.amount(offer.amount),
+                    if (offer.owner == state.organiser) "Box office" else "Resale · ${nameOf(offer.owner, wallets)}",
+                    accent,
+                ) {
+                    if (mine) LabOutlineButton("Cancel", { vm.cancelListing(t) }, accent = LabColors.Danger)
+                    else LabButton("Buy", { vm.buy(t) }, accent = LabColors.Matrix)
                 }
-                if (mine) LabOutlineButton("Cancel", { vm.cancelListing(t) }, accent = LabColors.Danger)
-                else LabButton("Buy", { vm.buy(t) }, accent = LabColors.Matrix)
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -323,12 +348,7 @@ private fun MyTicketsTab(vm: TicketsViewModel, state: TicketsState, wallet: Stor
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             mine.forEach { t ->
                 Column {
-                    Text("${state.event} · #${t.number}", fontWeight = FontWeight.Bold, color = accent)
-                    Text(
-                        if (t.nft.transferable) "Resale allowed, royalty to the organiser" else "No resale: only the organiser can take it back",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = LabColors.TextSecondary,
-                    )
+                    TicketStub(state.event, t.number, "ADMIT ONE", if (t.nft.transferable) "Resale allowed · royalty to organiser" else "No resale", accent) {}
                     Spacer(Modifier.height(6.dp))
                     if (t.offer != null) {
                         Text("Listed for ${Format.amount(t.offer.amount)}", style = MaterialTheme.typography.bodySmall, color = LabColors.Gold)
@@ -371,5 +391,36 @@ private fun DoorTab(vm: TicketsViewModel, state: TicketsState, wallet: StoredWal
         }
         Spacer(Modifier.height(8.dp))
         LabOutlineButton("Refresh", vm::reload, Modifier.fillMaxWidth(), accent)
+    }
+}
+
+/** A ticket drawn as a stub: event and seat on the left, a perforated edge, the number on the right. */
+@Composable
+private fun TicketStub(event: String, number: Int, price: String, detail: String, accent: Color, action: @Composable () -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        Modifier.fillMaxWidth().clip(shape)
+            .background(Brush.horizontalGradient(listOf(accent.copy(alpha = 0.28f), LabColors.SurfaceHigh)))
+            .border(1.dp, accent.copy(alpha = 0.5f), shape),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f).padding(14.dp)) {
+            Text(event.uppercase(), style = MaterialTheme.typography.labelSmall, color = accent, maxLines = 1)
+            Text(price, fontFamily = Mono, fontWeight = FontWeight.Bold, color = LabColors.TextPrimary)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = LabColors.TextSecondary, maxLines = 1)
+            Spacer(Modifier.height(6.dp))
+            action()
+        }
+        Canvas(Modifier.width(2.dp).height(86.dp)) {
+            var y = 0f
+            while (y < size.height) {
+                drawLine(accent.copy(alpha = 0.6f), Offset(size.width / 2, y), Offset(size.width / 2, y + 5f), strokeWidth = size.width)
+                y += 11f
+            }
+        }
+        Column(Modifier.width(64.dp).padding(vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(Icons.Outlined.ConfirmationNumber, contentDescription = null, tint = accent)
+            Text("#$number", fontFamily = Mono, fontWeight = FontWeight.Bold, color = LabColors.TextPrimary)
+        }
     }
 }
