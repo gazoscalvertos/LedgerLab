@@ -36,13 +36,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.ledgerlab.app.ui.theme.LabColors
+import com.ledgerlab.xrpl.XrplNetwork
 
-/** LedgerLab's screens. [mockup] ones are use cases: small apps built from several features, shown in their own section. */
+/**
+ * LedgerLab's screens. [mockup] ones are use cases: small apps built from several features, shown in their own section.
+ * Only [readOnly] ones open on Mainnet; everything that signs with a wallet stays on the test networks.
+ */
 enum class LabFeature(
     val title: String,
     val blurb: String,
@@ -50,6 +55,7 @@ enum class LabFeature(
     val color: Color,
     val available: Boolean = true,
     val mockup: Boolean = false,
+    val readOnly: Boolean = false,
 ) {
     WALLET("Wallet", "Create or import a wallet and fund it from the faucet", Icons.Outlined.AccountBalanceWallet, LabColors.Matrix),
     TOKENS("Tokens", "Issue, hold and send your own tokens", Icons.Outlined.Token, LabColors.Gold),
@@ -58,7 +64,7 @@ enum class LabFeature(
     ESCROW("Escrow", "Lock XRP or tokens until a time", Icons.Outlined.Lock, LabColors.Orange),
     CHANNELS("Channels", "Stream XRP micropayments off ledger", Icons.Outlined.Bolt, LabColors.Matrix),
     AMM("AMM", "Provide liquidity to automated market makers", Icons.Outlined.WaterDrop, LabColors.Violet),
-    EXPLORER("Explorer", "Look up any account or transaction", Icons.Outlined.Search, LabColors.TextPrimary),
+    EXPLORER("Explorer", "Look up any account or transaction", Icons.Outlined.Search, LabColors.TextPrimary, readOnly = true),
     NAMES(".xrp names", "Register names, sell subdomains, pay by name", Icons.Outlined.Language, LabColors.Cyan, mockup = true),
     NOTARY("Notary", "Timestamp a file's fingerprint, verify it later", Icons.Outlined.Verified, LabColors.Gold, mockup = true),
     TICKETS("Event tickets", "NFT tickets with royalties and door check-in", Icons.Outlined.ConfirmationNumber, LabColors.Magenta, mockup = true),
@@ -69,6 +75,9 @@ enum class LabFeature(
     SUBSCRIPTIONS("Subscriptions", "Monthly Checks the merchant cashes", Icons.Outlined.Autorenew, LabColors.Cyan, mockup = true),
     TREASURY("Shared treasury", "A club wallet that needs 2 of 3 to spend", Icons.Outlined.AccountBalance, LabColors.Gold, mockup = true),
     BADGES("Verified badges", "On-ledger credentials anyone can check", Icons.Outlined.WorkspacePremium, LabColors.Magenta, mockup = true),
+    ;
+
+    fun usableOn(network: XrplNetwork): Boolean = readOnly || !network.isRealMoney
 }
 
 @Composable
@@ -76,11 +85,12 @@ fun LabsGrid(
     onOpen: (LabFeature) -> Unit,
     modifier: Modifier = Modifier,
     features: List<LabFeature> = LabFeature.entries.filter { !it.mockup },
+    network: XrplNetwork = XrplNetwork.DEFAULT,
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         features.chunked(2).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                row.forEach { LabCard(it, onOpen, Modifier.weight(1f)) }
+                row.forEach { LabCard(it, onOpen, Modifier.weight(1f), locked = !it.usableOn(network)) }
                 if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
@@ -88,13 +98,15 @@ fun LabsGrid(
 }
 
 @Composable
-private fun LabCard(feature: LabFeature, onOpen: (LabFeature) -> Unit, modifier: Modifier = Modifier) {
+private fun LabCard(feature: LabFeature, onOpen: (LabFeature) -> Unit, modifier: Modifier = Modifier, locked: Boolean = false) {
     val shape = RoundedCornerShape(16.dp)
+    val tagColor = if (locked) LabColors.TextMuted else feature.color
     Column(
         modifier
             .clip(shape)
             .background(LabColors.Surface)
-            .border(1.dp, if (feature.available) feature.color.copy(alpha = 0.5f) else LabColors.Outline, shape)
+            .border(1.dp, if (feature.available && !locked) feature.color.copy(alpha = 0.5f) else LabColors.Outline, shape)
+            .alpha(if (locked) 0.55f else 1f)
             .clickable(enabled = feature.available) { onOpen(feature) }
             .padding(14.dp),
     ) {
@@ -105,12 +117,16 @@ private fun LabCard(feature: LabFeature, onOpen: (LabFeature) -> Unit, modifier:
         Text(feature.blurb, style = MaterialTheme.typography.bodySmall, color = LabColors.TextSecondary, minLines = 2, maxLines = 2)
         Spacer(Modifier.height(10.dp))
         Text(
-            if (feature.available) "OPEN" else "SOON",
+            when {
+                !feature.available -> "SOON"
+                locked -> "TESTNET ONLY"
+                else -> "OPEN"
+            },
             style = MaterialTheme.typography.labelSmall,
-            color = feature.color,
+            color = tagColor,
             modifier = Modifier
                 .clip(RoundedCornerShape(50))
-                .background(feature.color.copy(alpha = 0.12f))
+                .background(tagColor.copy(alpha = 0.12f))
                 .padding(horizontal = 8.dp, vertical = 3.dp),
         )
     }

@@ -37,6 +37,9 @@ enum class XrplNetwork(
 
     val isRealMoney: Boolean get() = this == MAINNET
 
+    /** Where the dashboard reads past ledgers from. s2 is Ripple's full-history Mainnet server. */
+    val historyRpcUrl: String get() = if (this == MAINNET) "https://s2.ripple.com:51234" else rpcUrl
+
     companion object {
         val DEFAULT = TESTNET
 

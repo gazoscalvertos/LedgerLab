@@ -56,6 +56,7 @@ import com.ledgerlab.app.ui.components.LabsGrid
 import com.ledgerlab.app.ui.components.LedgerPulse
 import com.ledgerlab.app.ui.components.NetworkSwitcher
 import com.ledgerlab.app.ui.components.Panel
+import com.ledgerlab.app.ui.components.PeriodSwitcher
 import com.ledgerlab.app.ui.components.Sparkline
 import com.ledgerlab.app.ui.components.StatTile
 import com.ledgerlab.app.ui.components.TxLane
@@ -65,6 +66,7 @@ import com.ledgerlab.app.ui.theme.LabColors
 import com.ledgerlab.app.ui.theme.Mono
 import com.ledgerlab.xrpl.DashboardSnapshot
 import com.ledgerlab.xrpl.Format
+import com.ledgerlab.xrpl.StatsPeriod
 import com.ledgerlab.xrpl.StreamTx
 import com.ledgerlab.xrpl.XrplNetwork
 import kotlinx.coroutines.flow.Flow
@@ -76,6 +78,10 @@ fun DashboardScreen(
     connection: ConnectionState,
     snapshot: DashboardSnapshot,
     transactions: Flow<StreamTx>,
+    period: StatsPeriod,
+    history: HistoryState,
+    onSelectPeriod: (StatsPeriod) -> Unit,
+    onRetryHistory: () -> Unit,
     onSelectNetwork: (XrplNetwork) -> Unit,
     onOpenFeature: (LabFeature) -> Unit,
 ) {
@@ -135,31 +141,43 @@ fun DashboardScreen(
         }
 
         item {
-            StatGrid(snapshot, accent)
-        }
-
-        item {
-            Panel(title = "Transactions per ledger", accent = accent, trailing = {
-                Text("last ${snapshot.tpsHistory.size} ledgers", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
-            }) {
-                Sparkline(snapshot.tpsHistory, accent, Modifier.fillMaxWidth().height(110.dp))
+            Column {
+                Text("STATS", style = MaterialTheme.typography.labelSmall, color = LabColors.TextSecondary)
+                Spacer(Modifier.height(8.dp))
+                PeriodSwitcher(period, onSelectPeriod, accent)
             }
         }
 
-        item {
-            Panel(title = "What's happening on-ledger", accent = LabColors.Cyan, trailing = {
-                Text("last 20 ledgers", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
-            }) {
-                CategoryDonut(snapshot.categoryCounts, Modifier.fillMaxWidth())
+        if (period == StatsPeriod.LIVE) {
+            item {
+                StatGrid(snapshot, accent)
             }
-        }
 
-        item {
-            Panel(title = "Biggest XRP payments", accent = LabColors.Gold, trailing = {
-                Text("this session", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
-            }) {
-                WhaleFeed(snapshot.whales, Modifier.fillMaxWidth())
+            item {
+                Panel(title = "Transactions per ledger", accent = accent, trailing = {
+                    Text("last ${snapshot.tpsHistory.size} ledgers", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+                }) {
+                    Sparkline(snapshot.tpsHistory, accent, Modifier.fillMaxWidth().height(110.dp))
+                }
             }
+
+            item {
+                Panel(title = "What's happening on-ledger", accent = LabColors.Cyan, trailing = {
+                    Text("last 20 ledgers", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+                }) {
+                    CategoryDonut(snapshot.categoryCounts, Modifier.fillMaxWidth())
+                }
+            }
+
+            item {
+                Panel(title = "Biggest XRP payments", accent = LabColors.Gold, trailing = {
+                    Text("this session", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+                }) {
+                    WhaleFeed(snapshot.whales, Modifier.fillMaxWidth())
+                }
+            }
+        } else {
+            periodItems(period, history, accent, onRetryHistory)
         }
 
         item {
@@ -168,6 +186,7 @@ fun DashboardScreen(
                 title = "Core XRPL features, hands on",
                 features = LabFeature.entries.filter { !it.mockup },
                 accent = accent,
+                network = network,
                 onOpenFeature = onOpenFeature,
             )
         }
@@ -178,6 +197,7 @@ fun DashboardScreen(
                 title = "Real-world apps built on the ledger",
                 features = LabFeature.entries.filter { it.mockup },
                 accent = accent,
+                network = network,
                 onOpenFeature = onOpenFeature,
             )
         }
@@ -191,6 +211,7 @@ private fun LabSection(
     title: String,
     features: List<LabFeature>,
     accent: androidx.compose.ui.graphics.Color,
+    network: XrplNetwork,
     onOpenFeature: (LabFeature) -> Unit,
 ) {
     var open by rememberSaveable(eyebrow) { mutableStateOf(true) }
@@ -214,8 +235,16 @@ private fun LabSection(
         }
         AnimatedVisibility(open) {
             Column {
+                if (network.isRealMoney && features.any { !it.usableOn(network) }) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Anything that uses a wallet is off on Mainnet, since this is a demo app. Switch to Testnet to try it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LabColors.Gold,
+                    )
+                }
                 Spacer(Modifier.height(12.dp))
-                LabsGrid(onOpenFeature, Modifier.fillMaxWidth(), features = features)
+                LabsGrid(onOpenFeature, Modifier.fillMaxWidth(), features = features, network = network)
             }
         }
     }
