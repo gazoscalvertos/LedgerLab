@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ledgerlab.app.ui.components.LabFeature
+import com.ledgerlab.app.ui.components.MainnetLocked
 import com.ledgerlab.app.ui.dashboard.DashboardScreen
 import com.ledgerlab.app.ui.dashboard.DashboardViewModel
 import com.ledgerlab.app.ui.labs.AmmLab
@@ -45,8 +46,13 @@ class MainActivity : ComponentActivity() {
                 var open by rememberSaveable { mutableStateOf<LabFeature?>(null) }
                 val back = { open = null }
                 BackHandler(enabled = open != null, onBack = back)
+                val networkStore = (application as LedgerLabApp).networkStore
+                val network by networkStore.network.collectAsStateWithLifecycle()
+                val feature = open
 
-                when (open) {
+                if (feature != null && !feature.usableOn(network)) {
+                    MainnetLocked(feature, network, networkStore::select, onBack = back)
+                } else when (open) {
                     LabFeature.WALLET -> {
                         val vm: WalletViewModel = viewModel()
                         val state by vm.state.collectAsStateWithLifecycle()
@@ -71,14 +77,19 @@ class MainActivity : ComponentActivity() {
                     LabFeature.EXPLORER -> ExplorerLab(onBack = back)
                     null -> {
                         val vm: DashboardViewModel = viewModel()
-                        val network by vm.network.collectAsStateWithLifecycle()
                         val connection by vm.connection.collectAsStateWithLifecycle()
                         val snapshot by vm.snapshot.collectAsStateWithLifecycle()
+                        val period by vm.period.collectAsStateWithLifecycle()
+                        val history by vm.history.collectAsStateWithLifecycle()
                         DashboardScreen(
                             network = network,
                             connection = connection,
                             snapshot = snapshot,
                             transactions = vm.transactions,
+                            period = period,
+                            history = history,
+                            onSelectPeriod = vm::selectPeriod,
+                            onRetryHistory = vm::retryHistory,
                             onSelectNetwork = vm::selectNetwork,
                             onOpenFeature = { if (it.available) open = it },
                         )

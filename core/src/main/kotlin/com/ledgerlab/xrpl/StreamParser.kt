@@ -43,12 +43,14 @@ object StreamParser {
     }
 
     /**
-     * Parses one transaction envelope: a stream message, an `account_tx` entry (`tx`) or a `tx` response.
+     * Parses one transaction envelope: a stream message, an `account_tx` entry (`tx`), a `tx` response or an
+     * expanded `ledger` entry.
      * When the envelope has no nested transaction, [root] itself is treated as the transaction.
      */
     fun parseTx(root: JsonObject): StreamTx? {
         val tx = (root["tx_json"] ?: root["transaction"] ?: root["tx"]) as? JsonObject ?: root
-        val meta = root["meta"] as? JsonObject
+        // Ledgers fetched with expand=true carry API v1 metadata as `metaData`.
+        val meta = (root["meta"] ?: root["metaData"]) as? JsonObject
         val type = tx.string("TransactionType") ?: return null
         val amount = parseAmount(meta?.get("delivered_amount"))
             ?: parseAmount(tx["Amount"])

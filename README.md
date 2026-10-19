@@ -13,12 +13,16 @@ ledger in real time, and grows into a set of hands-on demos of what the XRPL can
     failed, and gold "whales" are XRP payments of 50K XRP or more
   - a transactions-per-ledger sparkline, a donut of what the network is being used for, and the biggest
     XRP payments seen this session
+  - **Time periods**: switch the stats between Live, 1h, 24h and 7d. Nodes keep ledgers but no running totals, so
+    past periods read the ledgers at each end of the window (exact close time, and XRP burned from `total_coins`)
+    plus 24 ledgers spread between them (estimated transaction counts, mix, volume and success rate)
 - **Network switcher** for Testnet (default), Devnet and Mainnet. The choice is remembered and shared by every screen.
+  Mainnet is read-only: the dashboard and explorer work, but everything that uses a wallet is switched off.
 - **Wallet lab**: create (Ed25519 or secp256k1) or import wallets by secret, activate and top up from the
   Testnet/Devnet faucet, see balance, reserve and spendable XRP, send XRP payments (with destination tags), and browse
   recent activity with links to the explorer. Keys are generated and transactions signed on the phone with
   [xrpl4j](https://github.com/XRPLF/xrpl4j); secrets are stored encrypted with an Android Keystore AES key and never
-  leave the device. Mainnet payments ask for confirmation first.
+  leave the device.
 
 - **Feature labs**, each with a "How it works" panel showing the transaction JSON:
   - **Tokens**: issue your own currency (enable rippling, open a trust line, issue) and send it on between holders
