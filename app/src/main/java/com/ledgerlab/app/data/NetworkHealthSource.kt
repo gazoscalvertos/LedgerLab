@@ -4,6 +4,8 @@ import com.ledgerlab.xrpl.AmendmentStatus
 import com.ledgerlab.xrpl.FeePressure
 import com.ledgerlab.xrpl.LedgerHeader
 import com.ledgerlab.xrpl.LedgerHistory
+import com.ledgerlab.xrpl.NodeSnapshot
+import com.ledgerlab.xrpl.Nodes
 import com.ledgerlab.xrpl.ValidatorTracker
 import com.ledgerlab.xrpl.XrplNetwork
 import com.ledgerlab.xrpl.wallet.XrplRpc
@@ -13,6 +15,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import okhttp3.Request
 import java.io.IOException
+import java.net.URI
 
 /**
  * The polled half of the dashboard: things the stream doesn't push, like fee escalation, the XRP supply and
@@ -40,6 +43,9 @@ class NetworkHealthSource(private val network: XrplNetwork) {
     /** Master key, signing key and domain for one validator. */
     fun manifest(key: String): Triple<String, String?, String?>? =
         ValidatorTracker.parseManifest(rpc.call("manifest", buildJsonObject { put("public_key", key) }))
+
+    /** The status of the server the dashboard talks to: its version, state, load and how many peers it has. */
+    fun nodes(): NodeSnapshot = Nodes.parseServerInfo(URI(network.wsUrl).host, rpc.call("server_info"))
 
     fun amendments(): List<AmendmentStatus> {
         val feature = rpc.call("feature")

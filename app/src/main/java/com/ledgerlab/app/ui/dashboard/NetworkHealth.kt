@@ -1,6 +1,7 @@
 package com.ledgerlab.app.ui.dashboard
 
 import com.ledgerlab.xrpl.FeePressure
+import com.ledgerlab.xrpl.NodeSnapshot
 import com.ledgerlab.xrpl.SupplyState
 import com.ledgerlab.xrpl.ValidatorSnapshot
 
@@ -11,4 +12,5 @@ data class NetworkHealth(
     val feeHistory: List<Double> = emptyList(),
     val supply: SupplyState? = null,
     val validators: ValidatorSnapshot = ValidatorSnapshot(),
+    val nodes: NodeSnapshot? = null,
 )

@@ -33,6 +33,8 @@ data class Validation(
     val ledgerHash: String,
     /** Amendment IDs this validator votes for. Only sent on flag ledgers, every 256 ledgers. */
     val amendments: List<String>?,
+    /** The software it runs, e.g. "2.3.0", decoded from `server_version`. Only sent on flag ledgers too. */
+    val version: String? = null,
 )
 
 data class LedgerClose(
