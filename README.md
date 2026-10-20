@@ -31,7 +31,12 @@ ledger in real time, and grows into a set of hands-on demos of what the XRPL can
     being voted on, or no votes yet
   - **Server & peers**: the connected server's version, state, peer count, uptime, load and history from
     `server_info` (there's no public count of every node on the network)
-  - Stats are grouped into Overview, Whales, Markets and Network tabs
+  - **What's happening**: transactions grouped into families that cover every current type (payments, DEX, AMM,
+    NFTs, trust lines, multi-purpose tokens, escrow, checks, oracles, identity, vaults, bridges, account settings
+    and network pseudo-transactions), plus a list by exact transaction type
+  - **Activity**: the busiest accounts, escrows/checks/channels (with XRP locked and released), how many payments
+    carry destination tags and transactions carry memos (with memo types), and for 1h/24h/7d a new-accounts chart
+  - Stats are grouped into Overview, Whales, Markets, Activity and Network tabs
   - a transactions-per-ledger sparkline and a donut of what the network is being used for
   - **Time periods**: switch the stats between Live, 1h, 24h and 7d. Nodes keep ledgers but no running totals, so
     past periods read the ledgers at each end of the window (exact close time, and XRP burned from `total_coins`)

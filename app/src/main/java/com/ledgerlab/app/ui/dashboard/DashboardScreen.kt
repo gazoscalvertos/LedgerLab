@@ -41,6 +41,7 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.MonitorHeart
+import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Waves
 import androidx.compose.material3.DrawerValue
@@ -75,8 +76,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ledgerlab.app.ui.components.AccountGrowth
 import com.ledgerlab.app.ui.components.AmendmentList
+import com.ledgerlab.app.ui.components.BusiestAccounts
 import com.ledgerlab.app.ui.components.CategoryDonut
 import com.ledgerlab.app.ui.components.DexAmmPulse
+import com.ledgerlab.app.ui.components.EscrowsChecks
 import com.ledgerlab.app.ui.components.FeeGauge
 import com.ledgerlab.app.ui.components.Heartbeat
 import com.ledgerlab.app.ui.components.LabFeature
@@ -88,8 +91,10 @@ import com.ledgerlab.app.ui.components.PeriodSwitcher
 import com.ledgerlab.app.ui.components.ServerStatus
 import com.ledgerlab.app.ui.components.Sparkline
 import com.ledgerlab.app.ui.components.StatTile
+import com.ledgerlab.app.ui.components.TagsMemos
 import com.ledgerlab.app.ui.components.TokenNftActivity
 import com.ledgerlab.app.ui.components.TxLane
+import com.ledgerlab.app.ui.components.TypeBreakdown
 import com.ledgerlab.app.ui.components.ValidatorMap
 import com.ledgerlab.app.ui.components.WhaleFeed
 import com.ledgerlab.app.ui.components.networkColor
@@ -268,6 +273,8 @@ fun DashboardScreen(
                                 Text("last 20 ledgers", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
                             }) {
                                 CategoryDonut(snapshot.categoryCounts, Modifier.fillMaxWidth())
+                                Spacer(Modifier.height(16.dp))
+                                TypeBreakdown(snapshot.typeCounts, Modifier.fillMaxWidth())
                             }
                         }
                     }
@@ -291,11 +298,9 @@ fun DashboardScreen(
                         }
                     }
                     StatsGroup.MARKETS -> marketItems(snapshot.activity, estimated = false, window = "this session")
-                    StatsGroup.NETWORK -> {
-                        accountItem(snapshot.activity, estimated = false, window = "this session", health = health,
-                            burnedDrops = health.supply?.burnedThisSessionDrops, burnedLabel = "Burned while you watched")
-                        liveNetworkItems(health)
-                    }
+                    StatsGroup.ACTIVITY -> activityItems(snapshot.activity, estimated = false, window = "this session", health = health,
+                        burnedDrops = health.supply?.burnedThisSessionDrops, burnedLabel = "Burned while you watched")
+                    StatsGroup.NETWORK -> liveNetworkItems(health)
                 }
             } else {
                 periodItems(period, history, accent, group, health, whaleDrops, onRetryHistory)
@@ -341,6 +346,7 @@ enum class StatsGroup(val label: String, val icon: ImageVector) {
     OVERVIEW("Overview", Icons.Outlined.Speed),
     WHALES("Whales", Icons.Outlined.Waves),
     MARKETS("Markets", Icons.Outlined.CandlestickChart),
+    ACTIVITY("Activity", Icons.Outlined.People),
     NETWORK("Network", Icons.Outlined.Hub),
 }
 
@@ -473,19 +479,43 @@ internal fun LazyListScope.marketItems(activity: ActivitySnapshot, estimated: Bo
     }
 }
 
-internal fun LazyListScope.accountItem(
+/** Busiest accounts, escrows and checks, tags and memos, and account growth. */
+internal fun LazyListScope.activityItems(
     activity: ActivitySnapshot,
     estimated: Boolean,
     window: String,
     health: NetworkHealth,
     burnedDrops: Long?,
     burnedLabel: String,
+    series: List<Long> = emptyList(),
+    sliceLabel: String = "",
 ) {
-    item(key = "accounts-$estimated") {
-        Panel(title = "Account growth", accent = LabColors.Orange, trailing = {
+    item(key = "busiest-$estimated") {
+        Panel(title = "Busiest accounts", accent = LabColors.Violet, trailing = {
             Text(window, style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
         }) {
-            AccountGrowth(activity, estimated, health.supply, burnedDrops, burnedLabel, Modifier.fillMaxWidth())
+            BusiestAccounts(activity, estimated, Modifier.fillMaxWidth())
+        }
+    }
+    item(key = "escrows-$estimated") {
+        Panel(title = "Escrows, checks & channels", accent = LabColors.Orange, trailing = {
+            Text(window, style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+        }) {
+            EscrowsChecks(activity, estimated, Modifier.fillMaxWidth())
+        }
+    }
+    item(key = "tags-$estimated") {
+        Panel(title = "Destination tags & memos", accent = LabColors.Gold, trailing = {
+            Text(window, style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+        }) {
+            TagsMemos(activity, estimated, Modifier.fillMaxWidth())
+        }
+    }
+    item(key = "accounts-$estimated") {
+        Panel(title = "Account growth", accent = LabColors.Matrix, trailing = {
+            Text(window, style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+        }) {
+            AccountGrowth(activity, estimated, health.supply, burnedDrops, burnedLabel, Modifier.fillMaxWidth(), series, sliceLabel)
         }
     }
 }

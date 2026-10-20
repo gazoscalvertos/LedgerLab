@@ -25,6 +25,12 @@ data class TxEffects(
     val ammSwap: Boolean = false,
     /** XRP paid for an NFT, when this transaction accepted a sell or buy offer priced in XRP. */
     val nftSaleDrops: Long? = null,
+    /** XRP an EscrowFinish released to its destination. */
+    val escrowReleasedDrops: Long? = null,
+    /** True when it names a DestinationTag, the way exchanges tell customers' deposits apart. */
+    val destinationTag: Boolean = false,
+    /** One entry per memo: its decoded MemoType, or "untyped". */
+    val memoTypes: List<String> = emptyList(),
 ) {
     companion object {
         val NONE = TxEffects()
@@ -38,6 +44,7 @@ data class TxEffects(
             var lp: Double? = null
             var sale: Long? = null
             var swap = false
+            var released: Long? = null
             val account = tx.string("Account")
             for (n in nodes) {
                 when (n.entryType) {
@@ -58,6 +65,9 @@ data class TxEffects(
                         if (before != null && after != null && before > 0) lp = after / before - 1
                     } else if (n.kind == Kind.DELETED) {
                         lp = -1.0
+                    }
+                    "Escrow" -> if (type == "EscrowFinish" && n.kind == Kind.DELETED) {
+                        released = (n.fields?.get("Amount") as? JsonPrimitive)?.content?.toLongOrNull()
                     }
                     "NFTokenOffer" -> if (type == "NFTokenAcceptOffer" && n.kind == Kind.DELETED) {
                         val drops = (n.fields?.get("Amount") as? JsonPrimitive)?.content?.toLongOrNull()
@@ -82,8 +92,22 @@ data class TxEffects(
                 tokens = tokens,
                 lpChange = lp,
                 ammSwap = swap,
+                escrowReleasedDrops = released,
+                destinationTag = tx.containsKey("DestinationTag"),
+                memoTypes = (tx["Memos"] as? JsonArray).orEmpty().map { m ->
+                    val memo = (m as? JsonObject)?.get("Memo") as? JsonObject
+                    memo?.string("MemoType")?.let(::decodeHexText) ?: "untyped"
+                },
                 nftSaleDrops = sale,
             )
+        }
+
+        /** Memo fields are hex; most types are short ASCII like "text/plain". Anything else shows as hex. */
+        internal fun decodeHexText(hex: String): String {
+            val bytes = runCatching { hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray() }.getOrNull()
+                ?: return hex.take(12)
+            val text = String(bytes, Charsets.UTF_8)
+            return if (text.isNotEmpty() && text.all { it in ' '..'~' }) text.take(40) else "0x" + hex.take(10).lowercase()
         }
 
         /** "XRP/USD" with XRP always first, otherwise alphabetical, so both directions count as one pair. */

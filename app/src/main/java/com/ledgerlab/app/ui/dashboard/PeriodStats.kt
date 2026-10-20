@@ -20,7 +20,9 @@ import com.ledgerlab.app.ui.components.Panel
 import com.ledgerlab.app.ui.components.Sparkline
 import com.ledgerlab.app.ui.components.StatTile
 import com.ledgerlab.app.ui.components.WhaleFeed
+import com.ledgerlab.app.ui.components.TypeBreakdown
 import com.ledgerlab.app.ui.theme.LabColors
+import com.ledgerlab.xrpl.AccountSlices
 import com.ledgerlab.xrpl.Format
 import com.ledgerlab.xrpl.PeriodSnapshot
 import com.ledgerlab.xrpl.StatsPeriod
@@ -79,6 +81,8 @@ internal fun LazyListScope.periodItems(
                             Text("sampled", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
                         }) {
                             CategoryDonut(s.categoryCounts, Modifier.fillMaxWidth())
+                            Spacer(Modifier.height(16.dp))
+                            TypeBreakdown(s.typeCounts, Modifier.fillMaxWidth())
                         }
                     }
                 }
@@ -90,8 +94,10 @@ internal fun LazyListScope.periodItems(
                     }
                 }
                 StatsGroup.MARKETS -> marketItems(s.activity, estimated = true, window = "est. ${covered(s)}")
-                StatsGroup.NETWORK -> accountItem(s.activity, estimated = true, window = "est. ${covered(s)}", health = health,
-                    burnedDrops = s.burnedDrops, burnedLabel = "Burned in ${covered(s)}, exact")
+                StatsGroup.ACTIVITY -> activityItems(s.activity, estimated = true, window = "est. ${covered(s)}", health = health,
+                    burnedDrops = s.burnedDrops, burnedLabel = "Burned in ${covered(s)}, exact",
+                    series = s.newAccountsSeries, sliceLabel = AccountSlices.label(s.period))
+                StatsGroup.NETWORK -> Unit
             }
             if (group != StatsGroup.NETWORK) item(key = "history-note") { MethodNote(s) }
         }

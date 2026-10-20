@@ -26,6 +26,23 @@ data class LedgerHeader(
     val totalCoinsDrops: Long,
 )
 
+/** How a period's new-accounts chart is sliced. */
+object AccountSlices {
+    fun count(period: StatsPeriod): Int = when (period) {
+        StatsPeriod.WEEK -> 7
+        StatsPeriod.DAY -> 6
+        StatsPeriod.HOUR -> 6
+        StatsPeriod.LIVE -> 0
+    }
+
+    fun label(period: StatsPeriod): String = when (period) {
+        StatsPeriod.WEEK -> "per day"
+        StatsPeriod.DAY -> "per 4 hours"
+        StatsPeriod.HOUR -> "per 10 minutes"
+        StatsPeriod.LIVE -> ""
+    }
+}
+
 data class SampledLedger(val header: LedgerHeader, val txs: List<StreamTx>)
 
 /**
@@ -43,6 +60,8 @@ data class PeriodSnapshot(
     val busiestTps: Double,
     val burnedDrops: Long,
     val categoryCounts: Map<TxCategory, Int>,
+    /** Sampled transactions by exact type, busiest first. */
+    val typeCounts: List<Pair<String, Int>> = emptyList(),
     val successRate: Double,
     val estimatedXrpMovedDrops: Long,
     /** Transactions per second in each sample ledger, oldest first. */
@@ -53,6 +72,8 @@ data class PeriodSnapshot(
     val truncated: Boolean,
     /** DEX, AMM, token, NFT and account activity, scaled up from the samples to the whole period. */
     val activity: ActivitySnapshot = ActivitySnapshot(),
+    /** Estimated new accounts in each slice of the period, oldest first; see [AccountSlices]. */
+    val newAccountsSeries: List<Long> = emptyList(),
 ) {
     val ledgers: Long get() = to.index - from.index
     val spanSeconds: Long get() = to.closeTime - from.closeTime
@@ -194,13 +215,35 @@ class LedgerHistory(
                 busiestTps = series.maxOrNull() ?: 0.0,
                 burnedDrops = (from.totalCoinsDrops - to.totalCoinsDrops).coerceAtLeast(0),
                 categoryCounts = txs.groupingBy { it.category }.eachCount(),
+                typeCounts = txs.groupingBy { it.type }.eachCount().entries.sortedByDescending { it.value }.map { it.key to it.value },
                 successRate = if (txs.isEmpty()) 1.0 else txs.count { it.succeeded }.toDouble() / txs.size,
                 estimatedXrpMovedDrops = moved,
                 tpsSeries = series,
                 whales = payments.sortedByDescending { it.xrpDrops }.take(WHALES),
                 truncated = truncated,
                 activity = tally.snapshot(scale),
+                newAccountsSeries = accountSeries(period, from, samples, ledgers, span),
             )
+        }
+
+        /**
+         * New accounts per slice (a day for 7d, 4 hours for 24h, 10 minutes for 1h). Each slice averages its own
+         * sample ledgers and scales by how many ledgers closed in it, so with 24 samples it's a rough shape.
+         */
+        internal fun accountSeries(period: StatsPeriod, from: LedgerHeader, samples: List<SampledLedger>, ledgers: Long, span: Long): List<Long> {
+            val slices = AccountSlices.count(period)
+            if (samples.isEmpty() || slices == 0) return emptyList()
+            val sliceSeconds = span.toDouble() / slices
+            val perSlice = ledgers.toDouble() / slices
+            val grouped = samples.groupBy {
+                ((it.header.closeTime - from.closeTime) / sliceSeconds).toInt().coerceIn(0, slices - 1)
+            }
+            return (0 until slices).map { i ->
+                val group = grouped[i].orEmpty()
+                if (group.isEmpty()) return@map 0L
+                val created = group.sumOf { s -> s.txs.filter { it.succeeded }.sumOf { it.effects.accountsCreated } }
+                Math.round(created.toDouble() / group.size * perSlice)
+            }
         }
     }
 }

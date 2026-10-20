@@ -139,6 +139,9 @@ fun AccountGrowth(
     burnedDrops: Long?,
     burnedLabel: String,
     modifier: Modifier = Modifier,
+    /** New accounts per slice of a past period, oldest first; empty when live. */
+    series: List<Long> = emptyList(),
+    sliceLabel: String = "",
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -174,6 +177,7 @@ fun AccountGrowth(
                 color = LabColors.Orange,
             )
         }
+        if (series.isNotEmpty()) NewAccountsChart(series, sliceLabel, Modifier.fillMaxWidth())
     }
 }
 
@@ -219,3 +223,128 @@ private fun RankBar(label: String, sub: String?, value: String, fraction: Float,
         Meter(fraction.coerceIn(0.02f, 1f), color.copy(alpha = 0.8f))
     }
 }
+
+/** XRP locked away and released by escrows, plus checks and payment channels. */
+@Composable
+fun EscrowsChecks(a: ActivitySnapshot, estimated: Boolean, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        SubHeading("Escrows")
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Fact("Created", count(a.escrowsCreated, estimated), LabColors.Orange, Modifier.weight(1f))
+            Fact("Finished", count(a.escrowsFinished, estimated), LabColors.Matrix, Modifier.weight(1f))
+            Fact("Cancelled", count(a.escrowsCancelled, estimated), LabColors.TextSecondary, Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Fact("XRP locked", approx(estimated, a.escrowLockedDrops) + Format.xrp(a.escrowLockedDrops), LabColors.Orange, Modifier.weight(1f))
+            Fact("XRP released", approx(estimated, a.escrowReleasedDrops) + Format.xrp(a.escrowReleasedDrops), LabColors.Matrix, Modifier.weight(1f))
+        }
+        SubHeading("Checks")
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Fact("Written", count(a.checksCreated, estimated), LabColors.Gold, Modifier.weight(1f))
+            Fact("Cashed", count(a.checksCashed, estimated), LabColors.Matrix, Modifier.weight(1f))
+            Fact("Cancelled", count(a.checksCancelled, estimated), LabColors.TextSecondary, Modifier.weight(1f))
+        }
+        SubHeading("Payment channels")
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Fact("Opened", count(a.channelsOpened, estimated), LabColors.Cyan, Modifier.weight(1f))
+            Fact("Claims", count(a.channelClaims, estimated), LabColors.Matrix, Modifier.weight(1f))
+            Spacer(Modifier.weight(1f))
+        }
+    }
+}
+
+/** The accounts sending the most transactions: usually exchanges, market makers and bots. */
+@Composable
+fun BusiestAccounts(a: ActivitySnapshot, estimated: Boolean, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (a.topAccounts.isEmpty()) Empty("Waiting for transactions…")
+        val max = a.topAccounts.maxOfOrNull { it.second } ?: 1L
+        val total = a.transactions.coerceAtLeast(1)
+        a.topAccounts.forEach { (account, n) ->
+            RankBar(
+                Format.shortAddress(account),
+                String.format(Locale.US, "%.1f%% of txs", n * 100.0 / total),
+                count(n, estimated),
+                n.toFloat() / max,
+                LabColors.Violet,
+            )
+        }
+        if (a.topAccounts.isNotEmpty()) {
+            val share = a.topAccounts.sumOf { it.second } * 100.0 / total
+            Text(
+                String.format(Locale.US, "The top %d send %.0f%% of all successful transactions.", a.topAccounts.size, share),
+                style = MaterialTheme.typography.bodySmall,
+                color = LabColors.TextMuted,
+            )
+        }
+    }
+}
+
+/** How often payments carry a destination tag, and transactions carry memos. */
+@Composable
+fun TagsMemos(a: ActivitySnapshot, estimated: Boolean, modifier: Modifier = Modifier) {
+    val tagShare = if (a.payments == 0L) 0.0 else a.paymentsWithTag.toDouble() / a.payments
+    val memoShare = if (a.transactions == 0L) 0.0 else a.withMemos.toDouble() / a.transactions
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column {
+            Row {
+                Text("PAYMENTS WITH A DESTINATION TAG", style = MaterialTheme.typography.labelSmall, color = LabColors.TextSecondary, modifier = Modifier.weight(1f))
+                Text(String.format(Locale.US, "%.0f%%", tagShare * 100), fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = LabColors.Cyan)
+            }
+            Spacer(Modifier.height(6.dp))
+            Meter(tagShare.toFloat(), LabColors.Cyan)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "${count(a.paymentsWithTag, estimated)} of ${count(a.payments, estimated)}. Exchanges use tags to tell whose deposit is whose.",
+                style = MaterialTheme.typography.bodySmall,
+                color = LabColors.TextMuted,
+            )
+        }
+        Column {
+            Row {
+                Text("TRANSACTIONS WITH MEMOS", style = MaterialTheme.typography.labelSmall, color = LabColors.TextSecondary, modifier = Modifier.weight(1f))
+                Text(String.format(Locale.US, "%.0f%%", memoShare * 100), fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = LabColors.Gold)
+            }
+            Spacer(Modifier.height(6.dp))
+            Meter(memoShare.toFloat(), LabColors.Gold)
+        }
+        if (a.topMemoTypes.isNotEmpty()) {
+            SubHeading("Memo types")
+            val max = a.topMemoTypes.maxOf { it.second }
+            a.topMemoTypes.forEach { (type, n) -> RankBar(type, null, count(n, estimated), n.toFloat() / max, LabColors.Gold) }
+        }
+    }
+}
+
+/** New accounts in each slice of a past period, as bars. */
+@Composable
+fun NewAccountsChart(series: List<Long>, sliceLabel: String, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        Text("NEW ACCOUNTS ${sliceLabel.uppercase()}", style = MaterialTheme.typography.labelSmall, color = LabColors.TextSecondary)
+        Spacer(Modifier.height(8.dp))
+        val max = (series.maxOrNull() ?: 0L).coerceAtLeast(1L)
+        Row(Modifier.fillMaxWidth().height(110.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
+            series.forEach { n ->
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(if (n == 0L) "0" else "~" + count(n, false), fontFamily = Mono, fontSize = 9.sp, color = LabColors.TextMuted, maxLines = 1)
+                    Spacer(Modifier.height(2.dp))
+                    Box(
+                        Modifier.fillMaxWidth()
+                            .height((90 * (n.toFloat() / max)).coerceAtLeast(2f).dp)
+                            .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                            .background(LabColors.Matrix.copy(alpha = 0.8f)),
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Row {
+            Text("oldest", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted, modifier = Modifier.weight(1f))
+            Text("newest", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+        }
+        Text("Estimated from the sample ledgers in each slice, so it shows the shape rather than exact counts.",
+            style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+    }
+}
+
+private fun approx(estimated: Boolean, n: Long) = if (estimated && n > 0) "~" else ""

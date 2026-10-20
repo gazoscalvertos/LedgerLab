@@ -30,6 +30,27 @@ data class ActivitySnapshot(
     val biggestNftSaleDrops: Long = 0,
     val accountsCreated: Long = 0,
     val accountsDeleted: Long = 0,
+    val escrowsCreated: Long = 0,
+    val escrowsFinished: Long = 0,
+    val escrowsCancelled: Long = 0,
+    /** XRP put into new escrows. */
+    val escrowLockedDrops: Long = 0,
+    /** XRP that finished escrows paid out. */
+    val escrowReleasedDrops: Long = 0,
+    val checksCreated: Long = 0,
+    val checksCashed: Long = 0,
+    val checksCancelled: Long = 0,
+    val channelsOpened: Long = 0,
+    val channelClaims: Long = 0,
+    /** Accounts sending the most transactions, busiest first. */
+    val topAccounts: List<Pair<String, Long>> = emptyList(),
+    /** Successful transactions counted, the denominator for shares. */
+    val transactions: Long = 0,
+    val payments: Long = 0,
+    val paymentsWithTag: Long = 0,
+    val withMemos: Long = 0,
+    /** Decoded MemoType values, most used first. */
+    val topMemoTypes: List<Pair<String, Long>> = emptyList(),
 ) {
     val fillRate: Double get() = if (offersCreated == 0L) 0.0 else offersFilled.toDouble() / offersCreated
 }
@@ -55,6 +76,15 @@ class ActivityTally(private val top: Int = 5) {
     private var nftBiggest = 0L
     private var accountsCreated = 0L
     private var accountsDeleted = 0L
+    private val counts = HashMap<String, Long>()
+    private var escrowLocked = 0L
+    private var escrowReleased = 0L
+    private val senders = HashMap<String, Long>()
+    private var transactions = 0L
+    private var payments = 0L
+    private var paymentsWithTag = 0L
+    private var withMemos = 0L
+    private val memoTypes = HashMap<String, Long>()
 
     private class Pool {
         var deposits = 0
@@ -66,6 +96,21 @@ class ActivityTally(private val top: Int = 5) {
     fun add(tx: StreamTx) {
         if (!tx.succeeded) return
         val e = tx.effects
+        transactions++
+        counts.merge(tx.type, 1L, Long::plus)
+        if (tx.account.isNotEmpty()) senders.merge(tx.account, 1L, Long::plus)
+        // A long session on Mainnet sees a lot of one-off senders; drop them so the map stays small.
+        if (senders.size > MAX_SENDERS) senders.values.removeAll { it <= 1L }
+        if (tx.type == "Payment") {
+            payments++
+            if (e.destinationTag) paymentsWithTag++
+        }
+        if (e.memoTypes.isNotEmpty()) {
+            withMemos++
+            for (t in e.memoTypes) memoTypes.merge(t, 1L, Long::plus)
+        }
+        if (tx.type == "EscrowCreate") escrowLocked += tx.xrpDrops
+        escrowReleased += e.escrowReleasedDrops ?: 0L
         offersFilled += e.offersFilled
         accountsCreated += e.accountsCreated
         accountsDeleted += e.accountsDeleted
@@ -120,7 +165,29 @@ class ActivityTally(private val top: Int = 5) {
             biggestNftSaleDrops = nftBiggest,
             accountsCreated = s(accountsCreated),
             accountsDeleted = s(accountsDeleted),
+            escrowsCreated = s(count("EscrowCreate")),
+            escrowsFinished = s(count("EscrowFinish")),
+            escrowsCancelled = s(count("EscrowCancel")),
+            escrowLockedDrops = s(escrowLocked),
+            escrowReleasedDrops = s(escrowReleased),
+            checksCreated = s(count("CheckCreate")),
+            checksCashed = s(count("CheckCash")),
+            checksCancelled = s(count("CheckCancel")),
+            channelsOpened = s(count("PaymentChannelCreate")),
+            channelClaims = s(count("PaymentChannelClaim")),
+            topAccounts = senders.entries.sortedByDescending { it.value }.take(top).map { it.key to s(it.value) },
+            transactions = s(transactions),
+            payments = s(payments),
+            paymentsWithTag = s(paymentsWithTag),
+            withMemos = s(withMemos),
+            topMemoTypes = memoTypes.entries.sortedByDescending { it.value }.take(top).map { it.key to s(it.value) },
         )
+    }
+
+    private fun count(type: String): Long = counts[type] ?: 0L
+
+    private companion object {
+        const val MAX_SENDERS = 20_000
     }
 
     fun reset() {
@@ -139,5 +206,14 @@ class ActivityTally(private val top: Int = 5) {
         nftBiggest = 0
         accountsCreated = 0
         accountsDeleted = 0
+        counts.clear()
+        escrowLocked = 0
+        escrowReleased = 0
+        senders.clear()
+        transactions = 0
+        payments = 0
+        paymentsWithTag = 0
+        withMemos = 0
+        memoTypes.clear()
     }
 }

@@ -33,9 +33,16 @@ object LabColors {
         TxCategory.AMM -> Violet
         TxCategory.NFT -> Magenta
         TxCategory.TRUST -> Gold
+        TxCategory.MPT -> Color(0xFFFFE07A)
         TxCategory.ESCROW -> Orange
+        TxCategory.CHECK -> Color(0xFFFFB38A)
+        TxCategory.ORACLE -> Color(0xFF4DD0A8)
+        TxCategory.IDENTITY -> Color(0xFFB98CFF)
+        TxCategory.VAULT -> Color(0xFF5FC8FF)
+        TxCategory.BRIDGE -> Color(0xFFFF7FA8)
         TxCategory.ACCOUNT -> Color(0xFF6FA8FF)
-        TxCategory.OTHER -> Color(0xFF9AA7B8)
+        TxCategory.NETWORK -> Color(0xFFC0CCDA)
+        TxCategory.OTHER -> Color(0xFF6B7788)
     }
 }
 
