@@ -1,6 +1,7 @@
 package com.ledgerlab.xrpl
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -13,7 +14,7 @@ import kotlinx.serialization.json.longOrNull
  */
 object StreamParser {
     const val SUBSCRIBE_REQUEST =
-        """{"id":"ledgerlab","command":"subscribe","streams":["ledger","transactions"]}"""
+        """{"id":"ledgerlab","command":"subscribe","streams":["ledger","transactions","validations"]}"""
 
     internal val json = Json { ignoreUnknownKeys = true }
 
@@ -22,6 +23,7 @@ object StreamParser {
         return when (root.string("type")) {
             "ledgerClosed" -> parseLedger(root, receivedAtMs)
             "transaction" -> parseTx(root)?.let { StreamEvent.Transaction(it) }
+            "validationReceived" -> parseValidation(root)
             "response" -> parseResponse(root)
             else -> null
         }
@@ -38,6 +40,20 @@ object StreamParser {
                 reserveBaseDrops = root.long("reserve_base") ?: 0L,
                 reserveIncDrops = root.long("reserve_inc") ?: 0L,
                 receivedAtMs = receivedAtMs,
+                hash = root.string("ledger_hash") ?: "",
+            ),
+        )
+    }
+
+    private fun parseValidation(root: JsonObject): StreamEvent? {
+        val key = root.string("validation_public_key") ?: return null
+        return StreamEvent.ValidationReceived(
+            Validation(
+                signingKey = key,
+                masterKey = root.string("master_key"),
+                ledgerIndex = root.long("ledger_index") ?: return null,
+                ledgerHash = root.string("ledger_hash") ?: return null,
+                amendments = (root["amendments"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content },
             ),
         )
     }
@@ -66,6 +82,7 @@ object StreamParser {
             result = meta?.string("TransactionResult") ?: root.string("engine_result") ?: "",
             ledgerIndex = root.long("ledger_index") ?: tx.long("ledger_index") ?: 0L,
             closeTime = tx.long("date") ?: root.long("date"),
+            effects = TxEffects.of(tx, meta),
         )
     }
 

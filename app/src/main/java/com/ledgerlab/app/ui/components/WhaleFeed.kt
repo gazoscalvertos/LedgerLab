@@ -17,17 +17,23 @@ import com.ledgerlab.app.ui.theme.Mono
 import com.ledgerlab.xrpl.Format
 import com.ledgerlab.xrpl.StreamTx
 
-/** The biggest XRP payments seen since the dashboard connected. */
+/** The biggest XRP payments seen since the dashboard connected. Those at or above [whaleDrops] are gold. */
 @Composable
-fun WhaleFeed(whales: List<StreamTx>, modifier: Modifier = Modifier) {
+fun WhaleFeed(
+    whales: List<StreamTx>,
+    whaleDrops: Long,
+    modifier: Modifier = Modifier,
+    ranked: Boolean = true,
+    emptyText: String = "Watching for big XRP payments…",
+) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (whales.isEmpty()) {
-            Text("Watching for big XRP payments…", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+            Text(emptyText, style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
         }
         whales.forEachIndexed { rank, tx ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "#${rank + 1}",
+                    if (ranked) "#${rank + 1}" else "•",
                     fontFamily = Mono,
                     style = MaterialTheme.typography.bodySmall,
                     color = LabColors.TextMuted,
@@ -37,7 +43,7 @@ fun WhaleFeed(whales: List<StreamTx>, modifier: Modifier = Modifier) {
                         Format.xrp(tx.xrpDrops),
                         fontFamily = Mono,
                         fontWeight = FontWeight.Bold,
-                        color = if (tx.xrpDrops >= WHALE_DROPS) LabColors.Gold else LabColors.Matrix,
+                        color = if (tx.xrpDrops >= whaleDrops) LabColors.Gold else LabColors.Matrix,
                     )
                     Text(
                         "${Format.shortAddress(tx.account)} → ${Format.shortAddress(tx.destination ?: "?")}",

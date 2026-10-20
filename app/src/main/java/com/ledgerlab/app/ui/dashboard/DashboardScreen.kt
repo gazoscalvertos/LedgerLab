@@ -25,7 +25,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -50,7 +53,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ledgerlab.app.ui.components.AccountGrowth
 import com.ledgerlab.app.ui.components.CategoryDonut
+import com.ledgerlab.app.ui.components.DexAmmPulse
+import com.ledgerlab.app.ui.components.FeeGauge
+import com.ledgerlab.app.ui.components.Heartbeat
 import com.ledgerlab.app.ui.components.LabFeature
 import com.ledgerlab.app.ui.components.LabsGrid
 import com.ledgerlab.app.ui.components.LedgerPulse
@@ -59,11 +66,16 @@ import com.ledgerlab.app.ui.components.Panel
 import com.ledgerlab.app.ui.components.PeriodSwitcher
 import com.ledgerlab.app.ui.components.Sparkline
 import com.ledgerlab.app.ui.components.StatTile
+import com.ledgerlab.app.ui.components.TokenNftActivity
 import com.ledgerlab.app.ui.components.TxLane
+import com.ledgerlab.app.ui.components.ValidatorMap
 import com.ledgerlab.app.ui.components.WhaleFeed
 import com.ledgerlab.app.ui.components.networkColor
+import com.ledgerlab.app.ui.components.pressureColor
+import com.ledgerlab.app.ui.labs.LabChip
 import com.ledgerlab.app.ui.theme.LabColors
 import com.ledgerlab.app.ui.theme.Mono
+import com.ledgerlab.xrpl.ActivitySnapshot
 import com.ledgerlab.xrpl.DashboardSnapshot
 import com.ledgerlab.xrpl.Format
 import com.ledgerlab.xrpl.StatsPeriod
@@ -80,12 +92,16 @@ fun DashboardScreen(
     transactions: Flow<StreamTx>,
     period: StatsPeriod,
     history: HistoryState,
+    health: NetworkHealth,
+    whaleThresholdXrp: Long,
+    onSetWhaleThreshold: (Long) -> Unit,
     onSelectPeriod: (StatsPeriod) -> Unit,
     onRetryHistory: () -> Unit,
     onSelectNetwork: (XrplNetwork) -> Unit,
     onOpenFeature: (LabFeature) -> Unit,
 ) {
     val accent = networkColor(network)
+    val whaleDrops = whaleThresholdXrp * 1_000_000L
     val insets = WindowInsets.systemBars.asPaddingValues()
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(LabColors.Background),
@@ -137,7 +153,7 @@ fun DashboardScreen(
         }
 
         item(key = "lane-$network") {
-            TxLane(transactions, Modifier.fillMaxWidth().height(260.dp))
+            TxLane(transactions, whaleDrops, Modifier.fillMaxWidth().height(260.dp))
         }
 
         item {
@@ -169,15 +185,55 @@ fun DashboardScreen(
                 }
             }
 
-            item {
-                Panel(title = "Biggest XRP payments", accent = LabColors.Gold, trailing = {
+            item(key = "fee") {
+                val level = health.fee?.level
+                Panel(title = "Fee pressure", accent = pressureColor(level), trailing = {
+                    Text("open ledger", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+                }) {
+                    FeeGauge(health.fee, health.feeHistory, Modifier.fillMaxWidth())
+                }
+            }
+
+            item(key = "heartbeat") {
+                Panel(title = "Ledger heartbeat", accent = accent, trailing = {
+                    Text("last 60s", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+                }) {
+                    Heartbeat(snapshot.closeIntervals, snapshot.lastCloseAtMs, snapshot.ledgerIndex, accent, Modifier.fillMaxWidth())
+                }
+            }
+
+            item(key = "whales") {
+                Panel(title = "Whale alerts", accent = LabColors.Gold, trailing = {
                     Text("this session", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
                 }) {
-                    WhaleFeed(snapshot.whales, Modifier.fillMaxWidth())
+                    WhaleThreshold(whaleThresholdXrp, onSetWhaleThreshold)
+                    Spacer(Modifier.height(14.dp))
+                    WhaleFeed(
+                        snapshot.whaleAlerts,
+                        whaleDrops,
+                        Modifier.fillMaxWidth(),
+                        ranked = false,
+                        emptyText = "No payments of ${Format.grouped(whaleThresholdXrp)} XRP or more yet. They'll pop up in the lane as they land.",
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text("BIGGEST XRP PAYMENTS", style = MaterialTheme.typography.labelSmall, color = LabColors.TextSecondary)
+                    Spacer(Modifier.height(10.dp))
+                    WhaleFeed(snapshot.whales, whaleDrops, Modifier.fillMaxWidth())
+                }
+            }
+
+            activityItems(snapshot.activity, estimated = false, window = "this session", health = health,
+                burnedDrops = health.supply?.burnedThisSessionDrops, burnedLabel = "Burned while you watched")
+
+            item(key = "validators") {
+                Panel(title = "Validators", accent = LabColors.Cyan, trailing = {
+                    Text("live", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+                }) {
+                    ValidatorMap(health.validators, Modifier.fillMaxWidth())
                 }
             }
         } else {
-            periodItems(period, history, accent, onRetryHistory)
+            periodItems(period, history, accent, health, whaleDrops, onRetryHistory)
         }
 
         item {
@@ -200,6 +256,54 @@ fun DashboardScreen(
                 network = network,
                 onOpenFeature = onOpenFeature,
             )
+        }
+    }
+}
+
+/** Threshold choices for whale alerts, in XRP. */
+private val WHALE_STEPS = listOf(1_000L to "1K", 10_000L to "10K", 50_000L to "50K", 100_000L to "100K", 1_000_000L to "1M")
+
+@Composable
+private fun WhaleThreshold(selected: Long, onSelect: (Long) -> Unit) {
+    Column {
+        Text("ALERT ME FROM", style = MaterialTheme.typography.labelSmall, color = LabColors.TextSecondary)
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            WHALE_STEPS.forEach { (xrp, label) ->
+                LabChip("$label XRP", xrp == selected, LabColors.Gold) { onSelect(xrp) }
+            }
+        }
+    }
+}
+
+/** DEX, token and account panels, shared by the live view and past periods. */
+internal fun LazyListScope.activityItems(
+    activity: ActivitySnapshot,
+    estimated: Boolean,
+    window: String,
+    health: NetworkHealth,
+    burnedDrops: Long?,
+    burnedLabel: String,
+) {
+    item(key = "dex-$estimated") {
+        Panel(title = "DEX & AMM pulse", accent = LabColors.Cyan, trailing = {
+            Text(window, style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+        }) {
+            DexAmmPulse(activity, estimated, Modifier.fillMaxWidth())
+        }
+    }
+    item(key = "tokens-$estimated") {
+        Panel(title = "Tokens & NFTs", accent = LabColors.Magenta, trailing = {
+            Text(window, style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+        }) {
+            TokenNftActivity(activity, estimated, Modifier.fillMaxWidth())
+        }
+    }
+    item(key = "accounts-$estimated") {
+        Panel(title = "Account growth", accent = LabColors.Orange, trailing = {
+            Text(window, style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+        }) {
+            AccountGrowth(activity, estimated, health.supply, burnedDrops, burnedLabel, Modifier.fillMaxWidth())
         }
     }
 }

@@ -51,6 +51,8 @@ data class PeriodSnapshot(
     val whales: List<StreamTx>,
     /** True when the node's history didn't reach back over the whole period. */
     val truncated: Boolean,
+    /** DEX, AMM, token, NFT and account activity, scaled up from the samples to the whole period. */
+    val activity: ActivitySnapshot = ActivitySnapshot(),
 ) {
     val ledgers: Long get() = to.index - from.index
     val spanSeconds: Long get() = to.closeTime - from.closeTime
@@ -179,6 +181,8 @@ class LedgerHistory(
             val payments = txs.filter { it.succeeded && it.category == TxCategory.PAYMENT && it.xrpDrops > 0 }
             val moved = if (samples.isEmpty()) 0L else (payments.sumOf { it.xrpDrops }.toDouble() / samples.size * ledgers).toLong()
             val series = samples.sortedBy { it.header.index }.map { it.txs.size / avgClose }
+            val tally = ActivityTally().apply { txs.forEach(::add) }
+            val scale = if (samples.isEmpty()) 0.0 else ledgers.toDouble() / samples.size
             return PeriodSnapshot(
                 period = period,
                 from = from,
@@ -195,6 +199,7 @@ class LedgerHistory(
                 tpsSeries = series,
                 whales = payments.sortedByDescending { it.xrpDrops }.take(WHALES),
                 truncated = truncated,
+                activity = tally.snapshot(scale),
             )
         }
     }

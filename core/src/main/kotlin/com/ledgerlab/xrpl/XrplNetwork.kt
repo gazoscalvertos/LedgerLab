@@ -9,6 +9,8 @@ enum class XrplNetwork(
     val clioRpcUrl: String,
     val faucetUrl: String?,
     val explorerUrl: String,
+    /** The published list of validators the network trusts (its default UNL). */
+    val validatorListUrl: String,
 ) {
     TESTNET(
         label = "Testnet",
@@ -17,6 +19,7 @@ enum class XrplNetwork(
         clioRpcUrl = "https://clio.altnet.rippletest.net:51234",
         faucetUrl = "https://faucet.altnet.rippletest.net/accounts",
         explorerUrl = "https://testnet.xrpl.org",
+        validatorListUrl = "https://vl.altnet.rippletest.net",
     ),
     DEVNET(
         label = "Devnet",
@@ -25,6 +28,7 @@ enum class XrplNetwork(
         clioRpcUrl = "https://clio.devnet.rippletest.net:51234",
         faucetUrl = "https://faucet.devnet.rippletest.net/accounts",
         explorerUrl = "https://devnet.xrpl.org",
+        validatorListUrl = "https://vl.devnet.rippletest.net",
     ),
     MAINNET(
         label = "Mainnet",
@@ -33,6 +37,7 @@ enum class XrplNetwork(
         clioRpcUrl = "https://s2.ripple.com:51234",
         faucetUrl = null,
         explorerUrl = "https://livenet.xrpl.org",
+        validatorListUrl = "https://vl.ripple.com",
     );
 
     val isRealMoney: Boolean get() = this == MAINNET

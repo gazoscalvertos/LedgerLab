@@ -31,6 +31,8 @@ internal fun LazyListScope.periodItems(
     period: StatsPeriod,
     history: HistoryState,
     accent: Color,
+    health: NetworkHealth,
+    whaleDrops: Long,
     onRetry: () -> Unit,
 ) {
     when (history) {
@@ -80,9 +82,11 @@ internal fun LazyListScope.periodItems(
                 Panel(title = "Biggest XRP payments", accent = LabColors.Gold, trailing = {
                     Text("in the samples", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
                 }) {
-                    WhaleFeed(s.whales, Modifier.fillMaxWidth())
+                    WhaleFeed(s.whales, whaleDrops, Modifier.fillMaxWidth())
                 }
             }
+            activityItems(s.activity, estimated = true, window = "est. ${covered(s)}", health = health,
+                burnedDrops = s.burnedDrops, burnedLabel = "Burned in ${covered(s)}, exact")
             item(key = "history-note") { MethodNote(s) }
         }
     }

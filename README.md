@@ -5,17 +5,30 @@ ledger in real time, and grows into a set of hands-on demos of what the XRPL can
 
 ## What's in it today
 
-- **Live dashboard** streaming the `ledger` and `transactions` WebSocket feeds from a public rippled server:
+- **Live dashboard** streaming the `ledger`, `transactions` and `validations` WebSocket feeds from a public rippled server:
   - a ledger "pulse" ring that fills while validators reach consensus and bursts on every close
   - throughput (tx/s), peak tx/s, average close time, base fee and reserves
   - the **TX lane**: every validated transaction streaks across a Matrix-style highway the moment its
     ledger closes, trailing the characters of its own hash. Colours show the transaction family, red means it
-    failed, and gold "whales" are XRP payments of 50K XRP or more
-  - a transactions-per-ledger sparkline, a donut of what the network is being used for, and the biggest
-    XRP payments seen this session
+    failed, and gold "whales" are big XRP payments
+  - **Whale alerts**: payments over a threshold you pick (1K to 1M XRP, 50K by default) pop up as cards over the
+    lane and collect in a list, next to the biggest XRP payments seen this session
+  - **Fee pressure gauge**: polls `fee` for how full the open ledger is, the queue and the escalated fee, and
+    swings from green to amber to red as the network gets busy
+  - **Ledger heartbeat**: an ECG trace where every close is a beat, spaced by its real interval, with ledgers/min
+    and jitter
+  - **DEX & AMM pulse**: offers placed vs filled, the busiest trading pairs, and AMM pools gaining or losing
+    liquidity (read from each transaction's metadata)
+  - **Tokens & NFTs**: the most active issued tokens, and NFT mints, sales, offers, burns and sale volume
+  - **Account growth**: accounts created and deleted, and total XRP burned since genesis from `total_coins`
+  - **Validators**: the network's published UNL as a live constellation, each validator coloured by how often it
+    signed the same ledger as the network, with domains from `manifest` and amendment votes from `feature`.
+    Validators don't publish where they are, so it's a ring rather than a world map
+  - a transactions-per-ledger sparkline and a donut of what the network is being used for
   - **Time periods**: switch the stats between Live, 1h, 24h and 7d. Nodes keep ledgers but no running totals, so
     past periods read the ledgers at each end of the window (exact close time, and XRP burned from `total_coins`)
-    plus 24 ledgers spread between them (estimated transaction counts, mix, volume and success rate)
+    plus 24 ledgers spread between them (estimated transaction counts, mix, volume, success rate, and the DEX,
+    token, NFT and account panels)
 - **Network switcher** for Testnet (default), Devnet and Mainnet. The choice is remembered and shared by every screen.
   Mainnet is read-only: the dashboard and explorer work, but everything that uses a wallet is switched off.
 - **Wallet lab**: create (Ed25519 or secp256k1) or import wallets by secret, activate and top up from the

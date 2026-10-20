@@ -20,6 +20,12 @@ data class DashboardSnapshot(
     val ledgersSeen: Long = 0,
     /** The biggest XRP payments seen this session, largest first. */
     val whales: List<StreamTx> = emptyList(),
+    /** Payments at or above the whale threshold, newest first. */
+    val whaleAlerts: List<StreamTx> = emptyList(),
+    /** Seconds between each recent ledger close, oldest first: the network's heartbeat. */
+    val closeIntervals: List<Double> = emptyList(),
+    /** DEX, AMM, token, NFT and account activity since the dashboard connected. */
+    val activity: ActivitySnapshot = ActivitySnapshot(),
 )
 
 /**
@@ -29,7 +35,14 @@ class DashboardStats(
     private val historySize: Int = 60,
     private val windowLedgers: Int = 20,
     private val whaleCount: Int = 6,
+    private val alertCount: Int = 8,
 ) {
+    /** XRP payments at or above this many drops raise a whale alert. */
+    var whaleThresholdDrops: Long = DEFAULT_WHALE_DROPS
+
+    private val alerts = ArrayDeque<StreamTx>()
+    private val closeIntervals = ArrayDeque<Double>()
+    private val activity = ActivityTally()
     private val ledgers = ArrayDeque<LedgerClose>()
     private val buckets = LinkedHashMap<Long, Bucket>()
     private val whales = mutableListOf<StreamTx>()
@@ -51,6 +64,9 @@ class DashboardStats(
         tpsHistory.clear()
         buckets.clear()
         whales.clear()
+        alerts.clear()
+        closeIntervals.clear()
+        activity.reset()
         txSeen = 0
         ledgersSeen = 0
         peakTps = 0.0
@@ -67,7 +83,7 @@ class DashboardStats(
             )
             is StreamEvent.LedgerClosed -> onLedger(event.ledger)
             is StreamEvent.Transaction -> onTx(event.tx)
-            StreamEvent.Connected, is StreamEvent.Disconnected -> Unit
+            StreamEvent.Connected, is StreamEvent.Disconnected, is StreamEvent.ValidationReceived -> Unit
         }
     }
 
@@ -90,6 +106,9 @@ class DashboardStats(
             ledgersSeen = ledgersSeen,
             peakTps = peakTps,
             whales = whales.toList(),
+            whaleAlerts = alerts.toList(),
+            closeIntervals = closeIntervals.toList(),
+            activity = activity.snapshot(),
         )
     }
 
@@ -110,6 +129,8 @@ class DashboardStats(
             if (seconds > 0) {
                 tpsHistory.addLast(ledger.txnCount / seconds)
                 while (tpsHistory.size > historySize) tpsHistory.removeFirst()
+                closeIntervals.addLast(seconds)
+                while (closeIntervals.size > historySize) closeIntervals.removeFirst()
             }
         }
         val recent = ledgers.toList()
@@ -141,6 +162,11 @@ class DashboardStats(
         if (tx.succeeded && tx.category == TxCategory.PAYMENT) bucket.xrpDrops += tx.xrpDrops
         while (buckets.size > windowLedgers) buckets.remove(buckets.keys.first())
 
+        activity.add(tx)
+        if (tx.succeeded && tx.category == TxCategory.PAYMENT && tx.xrpDrops >= whaleThresholdDrops) {
+            alerts.addFirst(tx)
+            while (alerts.size > alertCount) alerts.removeLast()
+        }
         if (tx.succeeded && tx.category == TxCategory.PAYMENT && tx.xrpDrops > 0) {
             if (whales.size < whaleCount || tx.xrpDrops > whales.last().xrpDrops) {
                 whales.add(tx)
@@ -168,11 +194,14 @@ class DashboardStats(
         return arrival > closed + LATE_TOLERANCE_SECONDS
     }
 
-    private companion object {
+    companion object {
+        /** The whale threshold until the user picks another: 50,000 XRP. */
+        const val DEFAULT_WHALE_DROPS = 50_000L * 1_000_000L
+
         /** Ledgers in the rolling average for close time and throughput. */
-        const val WINDOW = 10
+        private const val WINDOW = 10
 
         /** Close times are rounded to as much as 10 s, plus network jitter. */
-        const val LATE_TOLERANCE_SECONDS = 15.0
+        private const val LATE_TOLERANCE_SECONDS = 15.0
     }
 }
