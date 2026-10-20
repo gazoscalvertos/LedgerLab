@@ -21,6 +21,16 @@ class SettingsStore(context: Context) {
         _hasPinataKey.value = !jwt.isNullOrBlank()
     }
 
+    private val _whaleThresholdXrp = MutableStateFlow(prefs.getLong(KEY_WHALE, DEFAULT_WHALE_XRP))
+
+    /** XRP payments at or above this raise a whale alert on the dashboard. */
+    val whaleThresholdXrp: StateFlow<Long> = _whaleThresholdXrp.asStateFlow()
+
+    fun setWhaleThresholdXrp(xrp: Long) {
+        prefs.edit().putLong(KEY_WHALE, xrp).apply()
+        _whaleThresholdXrp.value = xrp
+    }
+
     /** Any other small secret a lab keeps on the device, such as escrow fulfillments. Encrypted at rest. */
     fun secret(name: String): String? = prefs.getString("secret-$name", null)?.let { runCatching { cipher.decrypt(it) }.getOrNull() }
 
@@ -31,5 +41,7 @@ class SettingsStore(context: Context) {
 
     private companion object {
         const val KEY_PINATA = "pinata-jwt"
+        const val KEY_WHALE = "whale-threshold-xrp"
+        const val DEFAULT_WHALE_XRP = 50_000L
     }
 }

@@ -2,6 +2,8 @@ package com.ledgerlab.app.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -30,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -57,8 +62,9 @@ private const val MIN_RELEASE_PER_SECOND = 6.0
 private const val MAX_PENDING = 800
 private const val MAX_STREAKS = 320
 
-/** XRP payments at or above this size are drawn as gold "whales". */
-const val WHALE_DROPS = 50_000L * 1_000_000L
+/** How long a whale alert card stays up over the lane. */
+private const val ALERT_NANOS = 5_000_000_000L
+private const val MAX_ALERTS = 2
 
 private class Streak(
     val lane: Int,
@@ -69,6 +75,8 @@ private class Streak(
     val label: TextLayoutResult,
     val weight: Float,
 )
+
+private class WhaleCard(val tx: StreamTx, val startNanos: Long)
 
 private class RainColumn(var y: Float, val speed: Float, val length: Int, val seed: Int)
 
@@ -82,15 +90,18 @@ private class LaneState {
     var releaseBudget = 0.0
     var nextLane = 0
     var released = 0L
+    val alerts = ArrayList<WhaleCard>()
 }
 
 /**
  * A Matrix-style highway: every real transaction streaks across one of the lanes as soon as its
- * ledger validates, trailing the glyphs of its own hash, over a backdrop of falling code.
+ * ledger validates, trailing the glyphs of its own hash, over a backdrop of falling code. XRP payments of
+ * at least [whaleDrops] streak in gold and pop up an alert card.
  */
 @Composable
 fun TxLane(
     transactions: Flow<StreamTx>,
+    whaleDrops: Long,
     modifier: Modifier = Modifier,
     lanes: Int = 7,
 ) {
@@ -108,6 +119,7 @@ fun TxLane(
         }
     }
 
+    val threshold by rememberUpdatedState(whaleDrops)
     LaunchedEffect(state) {
         var windowStart = 0L
         var windowCount = 0L
@@ -115,8 +127,9 @@ fun TxLane(
             withFrameNanos { now ->
                 val dt = if (state.lastFrameNanos == 0L) 0.0 else (now - state.lastFrameNanos) / 1e9
                 state.lastFrameNanos = now
-                releaseStreaks(state, now, dt, lanes, measurer)
+                releaseStreaks(state, now, dt, lanes, measurer, threshold)
                 state.streaks.removeAll { now - it.startNanos > it.durationNanos }
+                state.alerts.removeAll { now - it.startNanos > ALERT_NANOS }
                 if (now - windowStart > 1_000_000_000L) {
                     perSecond = (state.released - windowCount).toInt()
                     windowCount = state.released
@@ -146,16 +159,65 @@ fun TxLane(
             color = LabColors.Matrix.copy(alpha = 0.8f),
             modifier = Modifier.align(Alignment.TopEnd).padding(12.dp),
         )
+        WhaleAlerts(state, { frame }, Modifier.align(Alignment.BottomStart).padding(10.dp))
     }
 }
 
-private fun releaseStreaks(state: LaneState, now: Long, dt: Double, lanes: Int, measurer: TextMeasurer) {
+/** Reads the frame clock in its own scope, so only the cards recompose every frame, not the whole lane. */
+@Composable
+private fun WhaleAlerts(state: LaneState, now: () -> Long, modifier: Modifier) {
+    val time = now()
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (card in state.alerts) WhaleAlertCard(card, time)
+    }
+}
+
+/** Slides in from the left, holds, then fades away. */
+@Composable
+private fun WhaleAlertCard(card: WhaleCard, now: Long) {
+    val age = (now - card.startNanos).coerceAtLeast(0L)
+    val enter = (age / 300_000_000f).coerceIn(0f, 1f)
+    val exit = ((ALERT_NANOS - age) / 600_000_000f).coerceIn(0f, 1f)
+    val shape = RoundedCornerShape(10.dp)
+    Row(
+        Modifier
+            .graphicsLayer {
+                translationX = (1f - enter) * -60.dp.toPx()
+                alpha = minOf(enter, exit)
+            }
+            .clip(shape)
+            .background(Color.Black.copy(alpha = 0.78f))
+            .border(1.dp, LabColors.Gold.copy(alpha = 0.8f), shape)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("WHALE", fontFamily = Mono, fontWeight = FontWeight.Black, fontSize = 10.sp, color = LabColors.Background,
+            modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(LabColors.Gold).padding(horizontal = 5.dp, vertical = 1.dp))
+        Spacer(Modifier.width(8.dp))
+        Column {
+            Text(Format.xrp(card.tx.xrpDrops), fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = LabColors.Gold)
+            Text(
+                "${Format.shortAddress(card.tx.account)} → ${Format.shortAddress(card.tx.destination ?: "?")}",
+                fontFamily = Mono,
+                fontSize = 10.sp,
+                color = LabColors.TextSecondary,
+            )
+        }
+    }
+}
+
+private fun releaseStreaks(state: LaneState, now: Long, dt: Double, lanes: Int, measurer: TextMeasurer, whaleDrops: Long) {
     val rate = max(state.pending.size / DRAIN_SECONDS, MIN_RELEASE_PER_SECOND)
     state.releaseBudget = minOf(state.releaseBudget + rate * dt, ceil(rate))
     while (state.releaseBudget >= 1.0 && state.pending.isNotEmpty()) {
         state.releaseBudget -= 1.0
         val tx = state.pending.removeFirst()
-        state.streaks.add(newStreak(tx, now, state.nextLane, measurer))
+        val whale = tx.succeeded && tx.xrpDrops >= whaleDrops
+        state.streaks.add(newStreak(tx, now, state.nextLane, measurer, whale))
+        if (whale) {
+            state.alerts.add(WhaleCard(tx, now))
+            while (state.alerts.size > MAX_ALERTS) state.alerts.removeAt(0)
+        }
         state.nextLane = (state.nextLane + 1 + Random.nextInt(lanes - 1)) % lanes
         state.released++
     }
@@ -163,8 +225,7 @@ private fun releaseStreaks(state: LaneState, now: Long, dt: Double, lanes: Int, 
     while (state.streaks.size > MAX_STREAKS) state.streaks.removeAt(0)
 }
 
-private fun newStreak(tx: StreamTx, now: Long, lane: Int, measurer: TextMeasurer): Streak {
-    val whale = tx.xrpDrops >= WHALE_DROPS
+private fun newStreak(tx: StreamTx, now: Long, lane: Int, measurer: TextMeasurer, whale: Boolean): Streak {
     val color = when {
         !tx.succeeded -> LabColors.Danger
         whale -> LabColors.Gold

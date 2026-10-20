@@ -81,6 +81,8 @@ class MainActivity : ComponentActivity() {
                         val snapshot by vm.snapshot.collectAsStateWithLifecycle()
                         val period by vm.period.collectAsStateWithLifecycle()
                         val history by vm.history.collectAsStateWithLifecycle()
+                        val health by vm.health.collectAsStateWithLifecycle()
+                        val whaleThreshold by vm.whaleThresholdXrp.collectAsStateWithLifecycle()
                         DashboardScreen(
                             network = network,
                             connection = connection,
@@ -88,6 +90,9 @@ class MainActivity : ComponentActivity() {
                             transactions = vm.transactions,
                             period = period,
                             history = history,
+                            health = health,
+                            whaleThresholdXrp = whaleThreshold,
+                            onSetWhaleThreshold = vm::setWhaleThreshold,
                             onSelectPeriod = vm::selectPeriod,
                             onRetryHistory = vm::retryHistory,
                             onSelectNetwork = vm::selectNetwork,
