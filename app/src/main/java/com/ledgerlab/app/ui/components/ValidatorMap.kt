@@ -40,7 +40,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ledgerlab.app.ui.theme.LabColors
 import com.ledgerlab.app.ui.theme.Mono
-import com.ledgerlab.xrpl.AmendmentVote
+import com.ledgerlab.xrpl.AmendmentStage
+import com.ledgerlab.xrpl.AmendmentStatus
 import com.ledgerlab.xrpl.Format
 import com.ledgerlab.xrpl.ValidatorInfo
 import com.ledgerlab.xrpl.ValidatorSnapshot
@@ -123,15 +124,93 @@ fun ValidatorMap(v: ValidatorSnapshot, modifier: Modifier = Modifier) {
         )
         Legend()
         ValidatorList(v.validators)
-        if (v.amendments.isNotEmpty()) {
-            Text("AMENDMENT VOTES", style = MaterialTheme.typography.labelSmall, color = LabColors.TextSecondary)
-            v.amendments.take(6).forEach { AmendmentRow(it, nowMs) }
+        if (v.versions.isNotEmpty()) {
+            Text("SOFTWARE VERSIONS", style = MaterialTheme.typography.labelSmall, color = LabColors.TextSecondary)
+            val reported = v.versions.sumOf { it.second }
+            v.versions.forEachIndexed { i, (version, n) ->
+                val color = if (i == 0) LabColors.Cyan else LabColors.Violet
+                Column {
+                    Row {
+                        Text(version, fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = LabColors.TextPrimary, modifier = Modifier.weight(1f))
+                        Text("$n of $reported", fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = color)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Bar(n.toFloat() / reported, color)
+                }
+            }
             Text(
-                "An amendment needs 80% of trusted validators for two weeks straight, then it switches on for everyone.",
+                "Validators report their version every 256 ledgers (about 15 minutes), so this fills in as they do.",
                 style = MaterialTheme.typography.bodySmall,
                 color = LabColors.TextMuted,
             )
         }
+    }
+}
+
+/**
+ * Every amendment the server knows: ones with a majority counting down to activation, ones being voted on,
+ * ones nobody has voted for yet, and those already switched on.
+ */
+@Composable
+fun AmendmentList(v: ValidatorSnapshot, modifier: Modifier = Modifier) {
+    val nowMs = System.currentTimeMillis()
+    var showEnabled by rememberSaveable { mutableStateOf(false) }
+    val byStage = v.amendmentStatus.groupBy { it.stage }
+    val defaultThreshold = Math.ceil(v.unlSize * 0.8).toInt()
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (v.amendmentStatus.isEmpty()) {
+            Text("Asking the server for its amendment list…", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+            return@Column
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StageCount("Enabled", byStage[AmendmentStage.ENABLED].orEmpty().size, LabColors.Matrix, Modifier.weight(1f))
+            StageCount("Majority", byStage[AmendmentStage.MAJORITY].orEmpty().size, LabColors.Gold, Modifier.weight(1f))
+            StageCount("Voting", byStage[AmendmentStage.VOTING].orEmpty().size, LabColors.Violet, Modifier.weight(1f))
+            StageCount("No votes", byStage[AmendmentStage.WAITING].orEmpty().size, LabColors.TextSecondary, Modifier.weight(1f))
+        }
+        v.amendmentStatus.filter { it.stage == AmendmentStage.MAJORITY || it.stage == AmendmentStage.VOTING }
+            .forEach { AmendmentRow(it, defaultThreshold, nowMs) }
+        val waiting = byStage[AmendmentStage.WAITING].orEmpty()
+        if (waiting.isNotEmpty()) {
+            Text("NO VOTES YET", style = MaterialTheme.typography.labelSmall, color = LabColors.TextSecondary)
+            Text(waiting.joinToString(" · ") { it.name }, style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+        }
+        val enabled = byStage[AmendmentStage.ENABLED].orEmpty()
+        if (enabled.isNotEmpty()) {
+            Text(
+                if (showEnabled) "Hide enabled" else "Show ${enabled.size} enabled",
+                style = MaterialTheme.typography.labelSmall,
+                color = LabColors.Cyan,
+                modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable { showEnabled = !showEnabled }.padding(vertical = 4.dp),
+            )
+            if (showEnabled) {
+                Text(
+                    enabled.sortedBy { it.name }.joinToString(" · ") { it.name },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LabColors.TextSecondary,
+                )
+            }
+        }
+        Text(
+            "An amendment needs 80% of trusted validators for two weeks straight, then it switches on for everyone.",
+            style = MaterialTheme.typography.bodySmall,
+            color = LabColors.TextMuted,
+        )
+    }
+}
+
+@Composable
+private fun StageCount(label: String, n: Int, color: Color, modifier: Modifier) {
+    Column(modifier) {
+        Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = LabColors.TextSecondary, maxLines = 1)
+        Text("$n", fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = color)
+    }
+}
+
+@Composable
+private fun Bar(fraction: Float, color: Color) {
+    Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)).background(LabColors.Outline)) {
+        Box(Modifier.fillMaxWidth(fraction.coerceIn(0.02f, 1f)).height(6.dp).clip(RoundedCornerShape(50)).background(color))
     }
 }
 
@@ -166,6 +245,10 @@ private fun ValidatorList(validators: List<ValidatorInfo>) {
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
+                v.version?.let {
+                    Text(it, fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+                    Spacer(Modifier.width(10.dp))
+                }
                 Text(
                     v.agreement?.let { String.format(Locale.US, "%.1f%%", it * 100) } ?: "silent",
                     fontFamily = Mono,
@@ -186,26 +269,33 @@ private fun ValidatorList(validators: List<ValidatorInfo>) {
 }
 
 @Composable
-private fun AmendmentRow(a: AmendmentVote, nowMs: Long) {
-    val fraction = if (a.threshold <= 0) 0f else (a.votes.toFloat() / a.threshold).coerceIn(0f, 1f)
-    val color = if (a.majoritySince != null) LabColors.Matrix else LabColors.Violet
+private fun AmendmentRow(a: AmendmentStatus, defaultThreshold: Int, nowMs: Long) {
+    val threshold = a.threshold ?: defaultThreshold
+    val votes = a.votes ?: 0
+    val fraction = if (threshold <= 0) 0f else votes.toFloat() / threshold
+    val color = when (a.stage) {
+        AmendmentStage.MAJORITY -> LabColors.Gold
+        AmendmentStage.VOTING -> LabColors.Violet
+        else -> LabColors.TextMuted
+    }
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(a.name, style = MaterialTheme.typography.bodySmall, color = LabColors.TextPrimary, maxLines = 1,
                 overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            Text("${a.votes}/${a.threshold}", fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = color)
+            if (!a.supported) {
+                Text("not in this server's build  ", style = MaterialTheme.typography.bodySmall, color = LabColors.Orange)
+            }
+            Text(if (threshold > 0) "$votes/$threshold" else "$votes", fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = color)
         }
         Spacer(Modifier.height(4.dp))
-        Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)).background(LabColors.Outline)) {
-            Box(Modifier.fillMaxWidth(fraction.coerceAtLeast(0.02f)).height(6.dp).clip(RoundedCornerShape(50)).background(color))
-        }
+        Bar(fraction, color)
         a.majoritySince?.let { since ->
             val enablesAtMs = (since + RIPPLE_EPOCH_SECONDS + TWO_WEEKS_SECONDS) * 1000
             val days = ((enablesAtMs - nowMs) / 86_400_000.0).coerceAtLeast(0.0)
             Text(
                 if (days < 1) "Has a majority · switches on within a day" else String.format(Locale.US, "Has a majority · switches on in %.0f days", days),
                 style = MaterialTheme.typography.bodySmall,
-                color = LabColors.Matrix,
+                color = LabColors.Gold,
             )
         }
     }

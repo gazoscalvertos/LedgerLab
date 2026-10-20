@@ -211,6 +211,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         }
         launch {
             while (isActive) {
+                background { source.nodes() }?.let { nodes -> _health.update { it.copy(nodes = nodes) } }
+                delay(NODES_POLL_MS)
+            }
+        }
+        launch {
+            while (isActive) {
                 _health.update { it.copy(validators = validators.snapshot()) }
                 delay(VALIDATOR_SNAPSHOT_MS)
             }
@@ -236,5 +242,6 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         const val VALIDATOR_POLL_MS = 60_000L
         const val VALIDATOR_SNAPSHOT_MS = 2_000L
         const val MANIFESTS_PER_ROUND = 60
+        const val NODES_POLL_MS = 30_000L
     }
 }

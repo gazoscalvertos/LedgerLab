@@ -18,6 +18,8 @@ data class ValidatorInfo(
     val agreement: Double?,
     val validations: Int,
     val lastLedger: Long,
+    /** Software version it reported on the last flag ledger, e.g. "2.3.0". */
+    val version: String? = null,
 )
 
 data class AmendmentVote(
@@ -40,6 +42,10 @@ data class ValidatorSnapshot(
     val othersSeen: Int = 0,
     val ledgersTracked: Int = 0,
     val amendments: List<AmendmentVote> = emptyList(),
+    /** Every amendment the server knows, in [AmendmentStatus.stage] order. */
+    val amendmentStatus: List<AmendmentStatus> = emptyList(),
+    /** Software versions across the validators shown, most common first. */
+    val versions: List<Pair<String, Int>> = emptyList(),
 ) {
     /** Average agreement across trusted validators that have reported. */
     val networkAgreement: Double?
@@ -54,7 +60,24 @@ data class AmendmentStatus(
     val votes: Int?,
     val threshold: Int?,
     val majoritySince: Long? = null,
-)
+    /** False when this server's software doesn't know how to apply it. */
+    val supported: Boolean = true,
+) {
+    val stage: AmendmentStage
+        get() = when {
+            enabled -> AmendmentStage.ENABLED
+            majoritySince != null -> AmendmentStage.MAJORITY
+            (votes ?: 0) > 0 -> AmendmentStage.VOTING
+            else -> AmendmentStage.WAITING
+        }
+}
+
+enum class AmendmentStage(val label: String) {
+    MAJORITY("Majority, activating"),
+    VOTING("Being voted on"),
+    WAITING("No votes yet"),
+    ENABLED("Enabled"),
+}
 
 /**
  * Follows the `validations` stream to show which validators agree with the network, and how they vote on
@@ -73,6 +96,7 @@ class ValidatorTracker(private val window: Int = 50) {
         var count = 0
         var lastLedger = 0L
         var votes: List<String>? = null
+        var version: String? = null
     }
 
     fun onValidation(v: Validation) {
@@ -82,6 +106,7 @@ class ValidatorTracker(private val window: Int = 50) {
         state.count++
         state.lastLedger = maxOf(state.lastLedger, v.ledgerIndex)
         if (v.amendments != null) state.votes = v.amendments
+        if (v.version != null) state.version = v.version
     }
 
     fun onValidatedLedger(index: Long, hash: String) {
@@ -125,6 +150,7 @@ class ValidatorTracker(private val window: Int = 50) {
                 agreement = if (considered.isEmpty()) null else matched.toDouble() / considered.size,
                 validations = group.sumOf { it.count },
                 lastLedger = group.maxOfOrNull { it.lastLedger } ?: 0L,
+                version = group.firstNotNullOfOrNull { it.version },
             )
         }
         val validators = if (unl.isNotEmpty()) {
@@ -151,6 +177,9 @@ class ValidatorTracker(private val window: Int = 50) {
         }.filter { it.votes > 0 || it.majoritySince != null }
             .sortedWith(compareByDescending<AmendmentVote> { it.majoritySince != null }.thenByDescending { it.votes })
 
+        val status = amendments.map { a -> if (a.votes == null && tally[a.id] != null) a.copy(votes = tally[a.id]) else a }
+            .sortedWith(compareBy<AmendmentStatus> { it.stage.ordinal }.thenByDescending { it.votes ?: 0 }.thenBy { it.name })
+
         return ValidatorSnapshot(
             validators = validators,
             unlKnown = unl.isNotEmpty(),
@@ -158,6 +187,9 @@ class ValidatorTracker(private val window: Int = 50) {
             othersSeen = if (unl.isEmpty()) 0 else grouped.keys.count { it !in unl },
             ledgersTracked = judged.size,
             amendments = votes,
+            amendmentStatus = status,
+            versions = validators.mapNotNull { it.version }.groupingBy { it }.eachCount()
+                .entries.sortedByDescending { it.value }.map { it.key to it.value },
         )
     }
 
@@ -214,6 +246,7 @@ class ValidatorTracker(private val window: Int = 50) {
                     votes = f.long("count")?.toInt(),
                     threshold = f.long("threshold")?.toInt(),
                     majoritySince = majorities[id.uppercase()],
+                    supported = (f["supported"] as? JsonPrimitive)?.content != "false",
                 )
             }
         }

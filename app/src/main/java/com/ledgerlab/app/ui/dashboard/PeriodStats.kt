@@ -20,7 +20,9 @@ import com.ledgerlab.app.ui.components.Panel
 import com.ledgerlab.app.ui.components.Sparkline
 import com.ledgerlab.app.ui.components.StatTile
 import com.ledgerlab.app.ui.components.WhaleFeed
+import com.ledgerlab.app.ui.components.TypeBreakdown
 import com.ledgerlab.app.ui.theme.LabColors
+import com.ledgerlab.xrpl.AccountSlices
 import com.ledgerlab.xrpl.Format
 import com.ledgerlab.xrpl.PeriodSnapshot
 import com.ledgerlab.xrpl.StatsPeriod
@@ -31,6 +33,7 @@ internal fun LazyListScope.periodItems(
     period: StatsPeriod,
     history: HistoryState,
     accent: Color,
+    group: StatsGroup,
     health: NetworkHealth,
     whaleDrops: Long,
     onRetry: () -> Unit,
@@ -63,33 +66,44 @@ internal fun LazyListScope.periodItems(
         }
         is HistoryState.Ready -> {
             val s = history.stats
-            item(key = "history-grid") { PeriodGrid(s, accent) }
-            item(key = "history-tps") {
-                Panel(title = "Throughput across ${covered(s)}", accent = accent, trailing = {
-                    Text("${s.sampled} sample ledgers", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
-                }) {
-                    Sparkline(s.tpsSeries, accent, Modifier.fillMaxWidth().height(110.dp))
+            when (group) {
+                StatsGroup.OVERVIEW -> {
+                    item(key = "history-grid") { PeriodGrid(s, accent) }
+                    item(key = "history-tps") {
+                        Panel(title = "Throughput across ${covered(s)}", accent = accent, trailing = {
+                            Text("${s.sampled} sample ledgers", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+                        }) {
+                            Sparkline(s.tpsSeries, accent, Modifier.fillMaxWidth().height(110.dp))
+                        }
+                    }
+                    item(key = "history-mix") {
+                        Panel(title = "What happened on-ledger", accent = LabColors.Cyan, trailing = {
+                            Text("sampled", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+                        }) {
+                            CategoryDonut(s.categoryCounts, Modifier.fillMaxWidth())
+                            Spacer(Modifier.height(16.dp))
+                            TypeBreakdown(s.typeCounts, Modifier.fillMaxWidth())
+                        }
+                    }
                 }
-            }
-            item(key = "history-mix") {
-                Panel(title = "What happened on-ledger", accent = LabColors.Cyan, trailing = {
-                    Text("sampled", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
-                }) {
-                    CategoryDonut(s.categoryCounts, Modifier.fillMaxWidth())
+                StatsGroup.WHALES -> item(key = "history-whales") {
+                    Panel(title = "Biggest XRP payments", accent = LabColors.Gold, trailing = {
+                        Text("in the samples", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
+                    }) {
+                        WhaleFeed(s.whales, whaleDrops, Modifier.fillMaxWidth())
+                    }
                 }
+                StatsGroup.MARKETS -> marketItems(s.activity, estimated = true, window = "est. ${covered(s)}")
+                StatsGroup.ACTIVITY -> activityItems(s.activity, estimated = true, window = "est. ${covered(s)}", health = health,
+                    burnedDrops = s.burnedDrops, burnedLabel = "Burned in ${covered(s)}, exact",
+                    series = s.newAccountsSeries, sliceLabel = AccountSlices.label(s.period))
+                StatsGroup.NETWORK -> Unit
             }
-            item(key = "history-whales") {
-                Panel(title = "Biggest XRP payments", accent = LabColors.Gold, trailing = {
-                    Text("in the samples", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
-                }) {
-                    WhaleFeed(s.whales, whaleDrops, Modifier.fillMaxWidth())
-                }
-            }
-            activityItems(s.activity, estimated = true, window = "est. ${covered(s)}", health = health,
-                burnedDrops = s.burnedDrops, burnedLabel = "Burned in ${covered(s)}, exact")
-            item(key = "history-note") { MethodNote(s) }
+            if (group != StatsGroup.NETWORK) item(key = "history-note") { MethodNote(s) }
         }
     }
+    // Validators, amendments and the server describe the network right now, whatever the period.
+    if (group == StatsGroup.NETWORK) liveNetworkItems(health)
 }
 
 @Composable

@@ -14,6 +14,8 @@ data class DashboardSnapshot(
     /** Transactions per second for each recent ledger, oldest first. */
     val tpsHistory: List<Double> = emptyList(),
     val categoryCounts: Map<TxCategory, Int> = emptyMap(),
+    /** The same window by exact transaction type, busiest first. */
+    val typeCounts: List<Pair<String, Int>> = emptyList(),
     val xrpMovedDrops: Long = 0,
     val successRate: Double = 1.0,
     val txSeen: Long = 0,
@@ -54,6 +56,7 @@ class DashboardStats(
 
     private class Bucket {
         val categories = IntArray(TxCategory.entries.size)
+        val types = HashMap<String, Int>()
         var xrpDrops = 0L
         var count = 0
         var succeeded = 0
@@ -92,14 +95,17 @@ class DashboardStats(
         var xrp = 0L
         var count = 0
         var ok = 0
+        val types = HashMap<String, Int>()
         for (b in buckets.values) {
             for (i in categories.indices) categories[i] += b.categories[i]
+            for ((type, n) in b.types) types.merge(type, n, Int::plus)
             xrp += b.xrpDrops
             count += b.count
             ok += b.succeeded
         }
         return snapshot.copy(
             categoryCounts = TxCategory.entries.associateWith { categories[it.ordinal] }.filterValues { it > 0 },
+            typeCounts = types.entries.sortedByDescending { it.value }.map { it.key to it.value },
             xrpMovedDrops = xrp,
             successRate = if (count == 0) 1.0 else ok.toDouble() / count,
             txSeen = txSeen,
@@ -157,6 +163,7 @@ class DashboardStats(
         txSeen++
         val bucket = buckets.getOrPut(tx.ledgerIndex) { Bucket() }
         bucket.categories[tx.category.ordinal]++
+        bucket.types.merge(tx.type, 1, Int::plus)
         bucket.count++
         if (tx.succeeded) bucket.succeeded++
         if (tx.succeeded && tx.category == TxCategory.PAYMENT) bucket.xrpDrops += tx.xrpDrops

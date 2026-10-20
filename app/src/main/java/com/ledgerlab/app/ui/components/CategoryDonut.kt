@@ -3,12 +3,15 @@ package com.ledgerlab.app.ui.components
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -16,6 +19,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -67,14 +73,53 @@ fun CategoryDonut(counts: Map<TxCategory, Int>, modifier: Modifier = Modifier) {
             if (sorted.isEmpty()) {
                 Text("Waiting for transactions…", style = MaterialTheme.typography.bodySmall, color = LabColors.TextMuted)
             }
-            sorted.take(6).forEach { (category, count) ->
+            sorted.forEach { (category, count) ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(9.dp).clip(CircleShape).background(LabColors.category(category)))
                     Spacer(Modifier.width(8.dp))
                     Text(category.label, style = MaterialTheme.typography.bodySmall, color = LabColors.TextPrimary, modifier = Modifier.weight(1f))
-                    Text("${count * 100 / total}%", fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = LabColors.TextSecondary)
+                    Text(percent(count, total), fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = LabColors.TextSecondary)
                 }
             }
         }
     }
 }
+
+private fun percent(count: Int, total: Int): String {
+    val p = count * 100.0 / total
+    return if (p < 1 && count > 0) "<1%" else "${p.toInt()}%"
+}
+
+/** Every transaction type in the window, busiest first, coloured by its family. */
+@Composable
+fun TypeBreakdown(types: List<Pair<String, Int>>, modifier: Modifier = Modifier) {
+    var all by rememberSaveable { mutableStateOf(false) }
+    val total = types.sumOf { it.second }.coerceAtLeast(1)
+    val max = types.maxOfOrNull { it.second } ?: 1
+    val shown = if (all) types else types.take(8)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("BY TRANSACTION TYPE · ${types.size}", style = MaterialTheme.typography.labelSmall, color = LabColors.TextSecondary)
+        shown.forEach { (type, count) ->
+            val color = LabColors.category(TxCategory.of(type))
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(type, fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = LabColors.TextPrimary, modifier = Modifier.weight(1f))
+                    Text("$count · ${percent(count, total)}", fontFamily = Mono, style = MaterialTheme.typography.bodySmall, color = color)
+                }
+                Spacer(Modifier.height(3.dp))
+                Box(Modifier.fillMaxWidth().height(5.dp).clip(CircleShape).background(LabColors.Outline)) {
+                    Box(Modifier.fillMaxWidth((count.toFloat() / max).coerceIn(0.02f, 1f)).height(5.dp).clip(CircleShape).background(color))
+                }
+            }
+        }
+        if (types.size > 8) {
+            Text(
+                if (all) "Show fewer" else "Show all ${types.size} types",
+                style = MaterialTheme.typography.labelSmall,
+                color = LabColors.Cyan,
+                modifier = Modifier.clickable { all = !all }.padding(vertical = 4.dp),
+            )
+        }
+    }
+}
+

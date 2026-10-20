@@ -54,6 +54,7 @@ object StreamParser {
                 ledgerIndex = root.long("ledger_index") ?: return null,
                 ledgerHash = root.string("ledger_hash") ?: return null,
                 amendments = (root["amendments"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content },
+                version = (root["server_version"] as? JsonPrimitive)?.content?.let(::decodeServerVersion),
             ),
         )
     }
@@ -97,6 +98,30 @@ object StreamParser {
             reserveIncDrops = result.long("reserve_inc"),
         )
     }
+
+    /**
+     * rippled packs its version into 64 bits: 0x183B (rippled's ID) in the top 16, then major, minor and patch
+     * bytes, then a byte whose top two bits say release (11), release candidate (10) or beta (01).
+     * Other implementations get a generic label.
+     */
+    fun decodeServerVersion(raw: String): String? {
+        val v = raw.toULongOrNull() ?: return null
+        if (v == 0UL) return null
+        if ((v shr 48).toInt() != RIPPLED_ID) return "other"
+        val major = ((v shr 40) and 0xFFUL).toInt()
+        val minor = ((v shr 32) and 0xFFUL).toInt()
+        val patch = ((v shr 24) and 0xFFUL).toInt()
+        val tag = ((v shr 16) and 0xFFUL).toInt()
+        val number = tag and 0x3F
+        val suffix = when (tag shr 6) {
+            0b10 -> "-rc$number"
+            0b01 -> "-b$number"
+            else -> ""
+        }
+        return "$major.$minor.$patch$suffix"
+    }
+
+    private const val RIPPLED_ID = 0x183B
 
     internal fun parseAmount(element: JsonElement?): Amount? = when (element) {
         is JsonPrimitive -> element.content.toLongOrNull()?.let { Amount.Xrp(it) }

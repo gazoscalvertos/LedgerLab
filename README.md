@@ -5,6 +5,8 @@ ledger in real time, and grows into a set of hands-on demos of what the XRPL can
 
 ## What's in it today
 
+- **Menu**: the ☰ button opens a side menu that jumps to the stats (by group), The basics, Use cases, or straight
+  into any lab. Stats, The basics and Use cases are each a heading that folds away.
 - **Live dashboard** streaming the `ledger`, `transactions` and `validations` WebSocket feeds from a public rippled server:
   - a ledger "pulse" ring that fills while validators reach consensus and bursts on every close
   - throughput (tx/s), peak tx/s, average close time, base fee and reserves
@@ -23,7 +25,18 @@ ledger in real time, and grows into a set of hands-on demos of what the XRPL can
   - **Account growth**: accounts created and deleted, and total XRP burned since genesis from `total_coins`
   - **Validators**: the network's published UNL as a live constellation, each validator coloured by how often it
     signed the same ledger as the network, with domains from `manifest` and amendment votes from `feature`.
-    Validators don't publish where they are, so it's a ring rather than a world map
+    Validators don't publish where they are, so it's a ring rather than a world map. Each validator's software
+    version (decoded from `server_version` on flag ledgers) and a version breakdown
+  - **Amendments**: every amendment the server knows, as enabled, majority (with days until it activates),
+    being voted on, or no votes yet
+  - **Server & peers**: the connected server's version, state, peer count, uptime, load and history from
+    `server_info` (there's no public count of every node on the network)
+  - **What's happening**: transactions grouped into families that cover every current type (payments, DEX, AMM,
+    NFTs, trust lines, multi-purpose tokens, escrow, checks, oracles, identity, vaults, bridges, account settings
+    and network pseudo-transactions), plus a list by exact transaction type
+  - **Activity**: the busiest accounts, escrows/checks/channels (with XRP locked and released), how many payments
+    carry destination tags and transactions carry memos (with memo types), and for 1h/24h/7d a new-accounts chart
+  - Stats are grouped into Overview, Whales, Markets, Activity and Network tabs
   - a transactions-per-ledger sparkline and a donut of what the network is being used for
   - **Time periods**: switch the stats between Live, 1h, 24h and 7d. Nodes keep ledgers but no running totals, so
     past periods read the ledgers at each end of the window (exact close time, and XRP burned from `total_coins`)
